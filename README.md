@@ -51,19 +51,54 @@ Oracle Cloud Infrastructure에서 Terraform과 Ansible을 활용한 프로덕션
 
 ```
 oci-k8s-production/
-├── terraform/           # 인프라 코드
-│   ├── main.tf         # VCN, Compute, Volumes
-│   ├── provider.tf     # OCI Provider
-│   ├── variables.tf    # 입력 변수
-│   └── outputs.tf      # Ansible 인벤토리 자동 생성
+├── terraform/                          # 인프라 프로비저닝
+│   ├── provider.tf                     # OCI Provider 설정
+│   ├── variables.tf                    # 변수 정의
+│   ├── terraform.tfvars                # 변수 값 (직접 생성)
+│   ├── main.tf                         # VCN, Compute, Volume 리소스
+│   └── outputs.tf                      # Ansible 인벤토리 자동 생성
 │
-├── ansible/
-│   ├── inventory/      # hosts.ini (Terraform 자동 생성)
-│   ├── roles/          # 14개 Role (common, k8s, addons)
-│   └── playbooks/      # 12개 플레이북 (순차 실행)
+├── ansible/                            # 구성 관리
+│   ├── inventory/
+│   │   ├── hosts.ini                   # Terraform이 자동 생성
+│   │   └── group_vars/
+│   │       ├── all.yml                 # 전역 변수
+│   │       ├── k8s_master.yml          # Master 노드 변수
+│   │       └── k8s_workers.yml         # Worker 노드 변수
+│   │
+│   ├── roles/                          # 14개 Role
+│   │   ├── common/                     # 시스템 기본 설정
+│   │   ├── containerd/                 # Container Runtime
+│   │   ├── kubernetes/                 # kubeadm, kubelet, kubectl
+│   │   ├── k8s-master/                 # Master 노드 초기화
+│   │   ├── k8s-worker/                 # Worker 노드 조인
+│   │   ├── cilium/                     # Cilium CNI (VXLAN)
+│   │   ├── gateway-api/                # Gateway API CRDs
+│   │   ├── helm/                       # Helm 패키지 매니저
+│   │   ├── monitoring/                 # Prometheus + Grafana
+│   │   ├── logging/                    # Loki + Promtail
+│   │   ├── argocd/                     # ArgoCD GitOps
+│   │   ├── sealed-secrets/             # Sealed Secrets
+│   │   ├── cert-manager/               # Cert-Manager
+│   │   └── metrics-server/             # Metrics Server
+│   │
+│   └── playbooks/                      # 12개 플레이북
+│       ├── 01-prepare-nodes.yml        # 노드 준비
+│       ├── 02-install-k8s.yml          # Kubernetes 설치
+│       ├── 03-init-cluster.yml         # 클러스터 초기화
+│       ├── 04-install-cilium.yml       # CNI 설치
+│       ├── 05-install-helm.yml         # Helm 설치
+│       ├── 06-install-gateway-api.yml  # Gateway API
+│       ├── 07-install-monitoring.yml   # Prometheus + Grafana
+│       ├── 08-install-logging.yml      # Loki + Promtail
+│       ├── 09-install-argocd.yml       # ArgoCD
+│       ├── 10-install-secrets.yml      # Sealed Secrets
+│       ├── 11-install-cert-manager.yml # Cert-Manager
+│       └── 12-install-metrics-server.yml # Metrics Server
 │
 └── scripts/
-    └── deploy.sh       # 전체 자동 배포
+    ├── deploy.sh                       # 전체 자동 배포
+    └── destroy.sh                      # 전체 삭제
 ```
 
 ---
@@ -260,9 +295,3 @@ cd terraform && terraform destroy -auto-approve
 - **프리티어 사용률**: OCPU 100% (4/4), Memory 100% (24GB/24GB), Storage 100% (200GB/200GB)
 - **월 예상 비용**: **$0** (완전 무료)
 - **주의사항**: 프리티어 한도 초과 시 자동 과금 (노드 추가 시 주의)
-
----
-
-## 📄 License
-
-MIT License
