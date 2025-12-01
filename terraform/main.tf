@@ -187,7 +187,7 @@ resource "oci_core_public_ip" "master_ip" {
   compartment_id = var.compartment_ocid
   lifetime       = "RESERVED"
   display_name   = "k8s-master-ip"
-  private_ip_id  = data.oci_core_private_ips.master_private_ip[count.index].id
+  private_ip_id  = data.oci_core_private_ips.master_private_ip[count.index].private_ips[0].id
 
   depends_on = [oci_core_instance.k8s_master]
 }
@@ -272,5 +272,5 @@ resource "oci_core_volume_attachment" "worker_bv_attachment" {
   instance_id     = oci_core_instance.k8s_worker[count.index].id
   volume_id       = oci_core_volume.worker_bv[count.index].id
   display_name    = "k8s-worker-bv-attachment"
-  device          = "/dev/oracleoci/oraclevd${chr(99 + count.index)}"
+  device          = "/dev/oracleoci/oraclevdc"
 }

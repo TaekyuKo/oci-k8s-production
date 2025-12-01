@@ -3,20 +3,25 @@
 
 - name: Download Cilium CLI
   get_url:
-    url: https://github.com/cilium/cilium-cli/releases/download/v{{ cilium_cli_version }}/cilium-linux-amd64.tar.gz
-    dest: /tmp/cilium-linux-amd64.tar.gz
+    url: https://github.com/cilium/cilium-cli/releases/download/v{{ cilium_cli_version }}/cilium-linux-arm64.tar.gz
+    dest: /tmp/cilium-linux-arm64.tar.gz
     mode: '0644'
 
 - name: Extract Cilium CLI
   unarchive:
-    src: /tmp/cilium-linux-amd64.tar.gz
+    src: /tmp/cilium-linux-arm64.tar.gz
     dest: /usr/local/bin
     remote_src: yes
     creates: /usr/local/bin/cilium
 
-- name: Install Cilium CNI
+- name: Install Cilium CNI with VXLAN tunnel
   shell: |
-    cilium install --version {{ cilium_version }}
+    cilium install \
+      --version {{ cilium_version }} \
+      --set ipam.mode=kubernetes \
+      --set routingMode=tunnel \
+      --set tunnelProtocol=vxlan \
+      --set kubeProxyReplacement=false
   become_user: ubuntu
   environment:
     KUBECONFIG: /home/ubuntu/.kube/config

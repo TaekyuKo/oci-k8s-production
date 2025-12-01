@@ -5,15 +5,21 @@
   hosts: k8s_master[0]
   become: yes
   roles:
-    - cilium
+    - ../roles/cilium
   
   post_tasks:
     - name: Wait for Cilium pods to be ready
       shell: kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=cilium-agent -n kube-system --timeout=300s
+      become_user: ubuntu
+      environment:
+        KUBECONFIG: /home/ubuntu/.kube/config
       changed_when: false
       
     - name: Verify Cilium status
       shell: kubectl -n kube-system get pods -l app.kubernetes.io/name=cilium
+      become_user: ubuntu
+      environment:
+        KUBECONFIG: /home/ubuntu/.kube/config
       register: cilium_status
       changed_when: false
       

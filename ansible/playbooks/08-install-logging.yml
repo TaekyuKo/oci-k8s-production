@@ -5,7 +5,7 @@
   hosts: k8s_master[0]
   become: yes
   roles:
-    - logging
+    - ../roles/logging
   
   post_tasks:
     - name: Verify Loki installation

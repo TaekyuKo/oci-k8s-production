@@ -112,9 +112,10 @@
   shell: |
     iptables -F INPUT
     iptables -F FORWARD
+    iptables -F OUTPUT
   changed_when: false
 
-- name: Configure iptables rules for Kubernetes
+- name: Configure iptables INPUT rules for Kubernetes
   iptables:
     chain: INPUT
     action: insert
@@ -142,6 +143,23 @@
   loop_control:
     label: "{{ item.comment }}"
 
+- name: Configure iptables FORWARD rules for Kubernetes
+  iptables:
+    chain: FORWARD
+    action: insert
+    rule_num: "{{ item.num }}"
+    match: "{{ item.match | default(omit) }}"
+    ctstate: "{{ item.state | default(omit) }}"
+    source: "{{ item.source | default(omit) }}"
+    destination: "{{ item.dest | default(omit) }}"
+    jump: ACCEPT
+    comment: "{{ item.comment }}"
+  loop:
+    - { num: 1, match: state, state: "ESTABLISHED,RELATED", comment: "Allow established forward connections" }
+    - { num: 2, source: "10.0.0.0/16", dest: "10.0.0.0/16", comment: "Allow VCN internal forward traffic" }
+  loop_control:
+    label: "{{ item.comment }}"
+
 - name: Allow ICMP (ping)
   iptables:
     chain: INPUT
@@ -157,8 +175,20 @@
     jump: ACCEPT
     comment: "{{ item.comment }}"
   loop:
-    - { port: 8472, comment: "Allow VXLAN (Flannel)" }
+    - { port: 8472, comment: "Allow VXLAN (Flannel/Cilium)" }
     - { port: 4789, comment: "Allow VXLAN alternative" }
+    - { port: 51871, comment: "Allow WireGuard (Cilium encryption)" }
+
+- name: Allow TCP for Cilium
+  iptables:
+    chain: INPUT
+    protocol: tcp
+    destination_port: "{{ item.port }}"
+    jump: ACCEPT
+    comment: "{{ item.comment }}"
+  loop:
+    - { port: 4240, comment: "Allow Cilium health endpoint" }
+    - { port: 4244, comment: "Allow Cilium Hubble server" }
 
 - name: Save iptables rules
   shell: netfilter-persistent save

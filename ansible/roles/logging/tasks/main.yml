@@ -11,8 +11,7 @@
   shell: |
     helm upgrade --install loki grafana/loki-stack \
       --namespace logging \
-      --set loki.persistence.enabled=true \
-      --set loki.persistence.size=10Gi \
+      --set loki.persistence.enabled=false \
       --set promtail.enabled=true \
       --wait --timeout 10m
   become_user: ubuntu

@@ -7,7 +7,7 @@
   register: kubelet_conf
 
 - name: Join worker node to cluster
-  shell: "{{ hostvars['localhost']['join_command'] }}"
+  shell: "{{ hostvars[groups['k8s_master'][0]]['join_command'] }}"
   when: not kubelet_conf.stat.exists
 
 - name: Wait for node to be ready
