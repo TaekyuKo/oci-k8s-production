@@ -168,11 +168,11 @@ kubectl get nodes
 
 배포 완료 후 NodePort를 통해 접속:
 
-| 서비스 | URL | 비밀번호 확인 |
-|--------|-----|-------------|
-| **Grafana** | `http://<master-ip>:30000` | `kubectl get secret -n monitoring grafana -o jsonpath='{.data.admin-password}' \| base64 -d` |
-| **Prometheus** | `http://<master-ip>:30090` | - |
-| **ArgoCD** | `https://<master-ip>:30080` | `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' \| base64 -d` |
+| 서비스 | URL | 계정 | 비밀번호 확인 |
+|--------|-----|------|-------------|
+| **Grafana** | `http://<master-ip>:30000` | admin | `kubectl get secret -n monitoring prometheus-grafana -o jsonpath='{.data.admin-password}' \| base64 -d` |
+| **Prometheus** | `http://<master-ip>:30090` | - | 인증 없음 |
+| **ArgoCD** | `http://<master-ip>:30080` | admin | `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' \| base64 -d` |
 
 ---
 
