@@ -1,0 +1,18 @@
+---
+# Kubernetes 컴포넌트 설치 (kubeadm, kubelet, kubectl)
+
+- name: Install Kubernetes on all nodes
+  hosts: k8s_all
+  become: yes
+  roles:
+    - kubernetes
+  
+  post_tasks:
+    - name: Verify Kubernetes installation
+      command: kubelet --version
+      register: kubelet_version
+      changed_when: false
+      
+    - name: Display installed version
+      debug:
+        msg: "✓ Installed {{ kubelet_version.stdout }}"

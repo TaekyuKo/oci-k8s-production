@@ -1,0 +1,31 @@
+---
+# ArgoCD GitOps 플랫폼 설치
+
+- name: Create argocd namespace
+  shell: kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+  become_user: ubuntu
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+
+- name: Install ArgoCD
+  shell: |
+    kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v{{ argocd_version }}/manifests/install.yaml
+  become_user: ubuntu
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+  args:
+    creates: /home/ubuntu/.argocd-installed
+
+- name: Patch ArgoCD server service to NodePort
+  shell: |
+    kubectl patch svc argocd-server -n argocd -p '{"spec": {"type": "NodePort", "ports": [{"port": 443, "nodePort": 30080, "name": "https"}]}}'
+  become_user: ubuntu
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+
+- name: Mark ArgoCD as installed
+  file:
+    path: /home/ubuntu/.argocd-installed
+    state: touch
+    owner: ubuntu
+    group: ubuntu

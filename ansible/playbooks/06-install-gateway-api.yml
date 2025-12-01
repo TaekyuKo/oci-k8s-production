@@ -1,0 +1,19 @@
+---
+# Gateway API 설치 (표준 인그레스 대체)
+
+- name: Install Gateway API
+  hosts: k8s_master[0]
+  become: yes
+  roles:
+    - gateway-api
+  
+  post_tasks:
+    - name: Verify Gateway API CRDs
+      shell: kubectl get crd gateways.gateway.networking.k8s.io
+      become_user: ubuntu
+      register: gateway_crd
+      changed_when: false
+      
+    - name: Display Gateway API status
+      debug:
+        msg: "✓ Gateway API CRDs installed"

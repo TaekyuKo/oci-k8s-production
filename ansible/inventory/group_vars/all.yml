@@ -1,0 +1,46 @@
+---
+# 전역 변수 (OCI Free Tier 최적화)
+cluster_name: "k8s-prod"
+kubernetes_version: "1.31"  # Kubernetes v1.31.x
+
+# 네트워크 (oci_k8s_terraform과 동일)
+pod_network_cidr: "192.168.0.0/16"  # Calico/Cilium 기본값
+service_cidr: "10.96.0.0/12"         # Kubernetes 기본값
+vcn_cidr: "10.0.0.0/16"              # OCI VCN CIDR
+
+# ========================================
+# 컴포넌트 버전
+# ========================================
+cilium_version: "1.16.5"
+cilium_cli_version: "0.16.20"
+gateway_api_version: "1.2.1"
+argocd_version: "2.13.2"
+sealed_secrets_version: "0.27.2"
+cert_manager_version: "1.16.2"
+metrics_server_version: "0.7.2"
+
+# ========================================
+# Cilium 설정 (네트워킹 & 관측성)
+# ========================================
+cilium_enable_hubble: true  # UI로 네트워크 플로우 시각화
+
+# ========================================
+# 모니터링 설정
+# ========================================
+prometheus_retention: "7d"  # Free Tier 스토리지 고려
+grafana_admin_password: "admin"  # 초기 비밀번호 (변경 권장)
+
+# ========================================
+# 로깅 설정
+# ========================================
+loki_retention: "3d"  # 단기 보관 (학습용)
+
+# ========================================
+# ArgoCD 설정
+# ========================================
+argocd_enable_notifications: false  # 선택적 활성화
+
+# ========================================
+# Cert-Manager 설정
+# ========================================
+letsencrypt_email: "your-email@example.com"  # 실제 이메일로 변경

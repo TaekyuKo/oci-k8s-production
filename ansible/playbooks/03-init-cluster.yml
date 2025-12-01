@@ -1,0 +1,21 @@
+---
+# Kubernetes 클러스터 초기화 및 워커 노드 조인
+
+- name: Initialize Kubernetes master node
+  hosts: k8s_master
+  become: yes
+  roles:
+    - k8s-master
+  
+  post_tasks:
+    - name: Save join command for workers
+      set_fact:
+        join_command: "{{ kubeadm_join_command.stdout }}"
+      delegate_to: localhost
+      run_once: true
+
+- name: Join worker nodes to cluster
+  hosts: k8s_workers
+  become: yes
+  roles:
+    - k8s-worker

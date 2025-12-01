@@ -1,0 +1,38 @@
+---
+# Helm 패키지 매니저 설치
+
+- name: Download Helm installation script
+  get_url:
+    url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+    dest: /tmp/get-helm-3.sh
+    mode: '0755'
+
+- name: Install Helm
+  command: /tmp/get-helm-3.sh
+  args:
+    creates: /usr/local/bin/helm
+
+- name: Verify Helm installation
+  command: helm version --short
+  become_user: ubuntu
+  register: helm_version_output
+  changed_when: false
+
+- name: Add common Helm repositories
+  command: "helm repo add {{ item.name }} {{ item.url }}"
+  become_user: ubuntu
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+  loop:
+    - { name: "prometheus-community", url: "https://prometheus-community.github.io/helm-charts" }
+    - { name: "grafana", url: "https://grafana.github.io/helm-charts" }
+    - { name: "argo", url: "https://argoproj.github.io/argo-helm" }
+    - { name: "jetstack", url: "https://charts.jetstack.io" }
+    - { name: "sealed-secrets", url: "https://bitnami-labs.github.io/sealed-secrets" }
+  failed_when: false
+
+- name: Update Helm repositories
+  command: helm repo update
+  become_user: ubuntu
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config

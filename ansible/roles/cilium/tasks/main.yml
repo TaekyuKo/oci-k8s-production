@@ -1,0 +1,31 @@
+---
+# Cilium CLI 설치 및 Cilium CNI 배포
+
+- name: Download Cilium CLI
+  get_url:
+    url: https://github.com/cilium/cilium-cli/releases/download/v{{ cilium_cli_version }}/cilium-linux-amd64.tar.gz
+    dest: /tmp/cilium-linux-amd64.tar.gz
+    mode: '0644'
+
+- name: Extract Cilium CLI
+  unarchive:
+    src: /tmp/cilium-linux-amd64.tar.gz
+    dest: /usr/local/bin
+    remote_src: yes
+    creates: /usr/local/bin/cilium
+
+- name: Install Cilium CNI
+  shell: |
+    cilium install --version {{ cilium_version }}
+  become_user: ubuntu
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+  args:
+    creates: /home/ubuntu/.cilium-installed
+
+- name: Mark Cilium as installed
+  file:
+    path: /home/ubuntu/.cilium-installed
+    state: touch
+    owner: ubuntu
+    group: ubuntu

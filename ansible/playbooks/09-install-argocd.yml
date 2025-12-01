@@ -1,0 +1,27 @@
+---
+# ArgoCD GitOps 플랫폼 설치
+
+- name: Install ArgoCD
+  hosts: k8s_master[0]
+  become: yes
+  roles:
+    - argocd
+  
+  post_tasks:
+    - name: Wait for ArgoCD server
+      shell: kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server -n argocd --timeout=300s
+      become_user: ubuntu
+      changed_when: false
+      
+    - name: Get ArgoCD admin password
+      shell: kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
+      become_user: ubuntu
+      register: argocd_password
+      changed_when: false
+      
+    - name: Display ArgoCD access info
+      debug:
+        msg:
+          - "✓ ArgoCD available at: https://{{ ansible_host }}:30080"
+          - "  Username: admin"
+          - "  Password: {{ argocd_password.stdout }}"

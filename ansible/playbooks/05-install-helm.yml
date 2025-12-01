@@ -1,0 +1,19 @@
+---
+# Helm 패키지 매니저 설치
+
+- name: Install Helm
+  hosts: k8s_master[0]
+  become: yes
+  roles:
+    - helm
+  
+  post_tasks:
+    - name: Verify Helm installation
+      command: helm version --short
+      become_user: ubuntu
+      register: helm_version
+      changed_when: false
+      
+    - name: Display Helm version
+      debug:
+        msg: "✓ {{ helm_version.stdout }}"

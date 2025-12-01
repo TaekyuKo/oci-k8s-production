@@ -1,0 +1,227 @@
+---
+# 노드 공통 설정 및 시스템 준비
+# - APT 업데이트
+# - 필수 패키지 설치
+# - iptables 초기화 (OCI REJECT 규칙 제거)
+# - Swap 비활성화
+# - 커널 모듈 로드
+# - sysctl 설정
+
+- name: Wait for APT lock to be released
+  shell: |
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do
+      echo "Waiting for other APT processes..."
+      sleep 5
+    done
+  changed_when: false
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install common packages
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+      - software-properties-common
+      - iptables-persistent
+      - netfilter-persistent
+      - jq
+      - conntrack
+      - socat
+    state: present
+
+- name: Set hostname from OCI metadata
+  block:
+    - name: Get instance display name from OCI metadata
+      uri:
+        url: http://169.254.169.254/opc/v2/instance/displayName
+        method: GET
+        headers:
+          Authorization: "Bearer Oracle"
+        return_content: yes
+      register: instance_name
+      failed_when: false
+      
+    - name: Set hostname to instance display name
+      hostname:
+        name: "{{ instance_name.content }}"
+      when: instance_name.content is defined and instance_name.content != ""
+
+# ========================================
+# OCI iptables 초기화
+# ========================================
+
+- name: Stop and disable OCI cloud agent services
+  systemd:
+    name: "{{ item }}"
+    state: stopped
+    enabled: no
+    masked: yes
+  loop:
+    - oracle-cloud-agent.service
+    - oracle-cloud-agent-updater
+  failed_when: false
+
+- name: Remove OCI default REJECT rules from INPUT chain
+  shell: |
+    while iptables -C INPUT -j REJECT --reject-with icmp-host-prohibited 2>/dev/null; do
+      iptables -D INPUT -j REJECT --reject-with icmp-host-prohibited
+    done
+  changed_when: false
+
+- name: Remove OCI default REJECT rules from FORWARD chain
+  shell: |
+    while iptables -C FORWARD -j REJECT --reject-with icmp-host-prohibited 2>/dev/null; do
+      iptables -D FORWARD -j REJECT --reject-with icmp-host-prohibited
+    done
+  changed_when: false
+
+- name: Backup and clean OCI iptables rules file
+  block:
+    - name: Backup original iptables rules
+      copy:
+        src: /etc/iptables/rules.v4
+        dest: /etc/iptables/rules.v4.oci.backup
+        remote_src: yes
+      failed_when: false
+      
+    - name: Remove REJECT rules from iptables rules file
+      lineinfile:
+        path: /etc/iptables/rules.v4
+        regexp: '.*REJECT.*icmp-host-prohibited.*'
+        state: absent
+
+# ========================================
+# Kubernetes iptables 규칙 설정
+# ========================================
+
+- name: Set iptables policies to ACCEPT
+  shell: |
+    iptables -P INPUT ACCEPT
+    iptables -P FORWARD ACCEPT
+    iptables -P OUTPUT ACCEPT
+  changed_when: false
+
+- name: Flush existing iptables rules
+  shell: |
+    iptables -F INPUT
+    iptables -F FORWARD
+  changed_when: false
+
+- name: Configure iptables rules for Kubernetes
+  iptables:
+    chain: INPUT
+    action: insert
+    rule_num: "{{ item.num }}"
+    protocol: "{{ item.proto | default(omit) }}"
+    source: "{{ item.source | default(omit) }}"
+    destination_port: "{{ item.dport | default(omit) }}"
+    in_interface: "{{ item.iface | default(omit) }}"
+    match: "{{ item.match | default(omit) }}"
+    ctstate: "{{ item.state | default(omit) }}"
+    jump: ACCEPT
+    comment: "{{ item.comment }}"
+  loop:
+    - { num: 1, iface: lo, comment: "Allow loopback" }
+    - { num: 2, match: state, state: "ESTABLISHED,RELATED", comment: "Allow established connections" }
+    - { num: 3, source: "10.0.0.0/16", comment: "Allow VCN internal traffic" }
+    - { num: 4, proto: tcp, dport: 22, comment: "Allow SSH" }
+    - { num: 5, proto: tcp, dport: 6443, comment: "Allow K8s API Server" }
+    - { num: 6, proto: tcp, dport: "2379:2380", comment: "Allow etcd" }
+    - { num: 7, proto: tcp, dport: 10250, comment: "Allow Kubelet API" }
+    - { num: 8, proto: tcp, dport: "30000:32767", comment: "Allow NodePort" }
+    - { num: 9, proto: tcp, dport: 80, comment: "Allow HTTP" }
+    - { num: 10, proto: tcp, dport: 443, comment: "Allow HTTPS" }
+    - { num: 11, proto: tcp, dport: 179, comment: "Allow BGP (Calico)" }
+  loop_control:
+    label: "{{ item.comment }}"
+
+- name: Allow ICMP (ping)
+  iptables:
+    chain: INPUT
+    protocol: icmp
+    jump: ACCEPT
+    comment: "Allow ICMP"
+
+- name: Allow UDP for CNI plugins
+  iptables:
+    chain: INPUT
+    protocol: udp
+    destination_port: "{{ item.port }}"
+    jump: ACCEPT
+    comment: "{{ item.comment }}"
+  loop:
+    - { port: 8472, comment: "Allow VXLAN (Flannel)" }
+    - { port: 4789, comment: "Allow VXLAN alternative" }
+
+- name: Save iptables rules
+  shell: netfilter-persistent save
+  changed_when: true
+
+- name: Disable iptables-restore on boot (prevent OCI override)
+  systemd:
+    name: iptables-restore
+    enabled: no
+  failed_when: false
+
+# ========================================
+# Swap 비활성화
+# ========================================
+
+- name: Disable swap
+  shell: swapoff -a
+  when: ansible_swaptotal_mb > 0
+
+- name: Remove swap from /etc/fstab
+  lineinfile:
+    path: /etc/fstab
+    regexp: '.*swap.*'
+    state: absent
+
+# ========================================
+# 커널 모듈 및 sysctl 설정
+# ========================================
+
+- name: Load kernel modules for Kubernetes
+  copy:
+    dest: /etc/modules-load.d/k8s.conf
+    content: |
+      overlay
+      br_netfilter
+
+- name: Load kernel modules now
+  modprobe:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - overlay
+    - br_netfilter
+
+- name: Set sysctl parameters for Kubernetes
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    sysctl_file: /etc/sysctl.d/k8s.conf
+    reload: yes
+  loop:
+    - { key: "net.bridge.bridge-nf-call-iptables", value: "1" }
+    - { key: "net.bridge.bridge-nf-call-ip6tables", value: "1" }
+    - { key: "net.ipv4.ip_forward", value: "1" }
+
+- name: Verify system configuration
+  debug:
+    msg:
+      - "✓ Common setup complete"
+      - "✓ APT packages installed"
+      - "✓ OCI iptables rules removed"
+      - "✓ Kubernetes iptables rules configured"
+      - "✓ Swap disabled"
+      - "✓ Kernel modules loaded"
+      - "✓ sysctl configured"

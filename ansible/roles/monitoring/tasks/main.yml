@@ -1,0 +1,31 @@
+---
+# Prometheus + Grafana 모니터링 스택 설치
+
+- name: Create monitoring namespace
+  shell: kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
+  become_user: ubuntu
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+
+- name: Install kube-prometheus-stack
+  shell: |
+    helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+      --namespace monitoring \
+      --set prometheus.service.type=NodePort \
+      --set prometheus.service.nodePort=30090 \
+      --set grafana.service.type=NodePort \
+      --set grafana.service.nodePort=30000 \
+      --set grafana.adminPassword=admin \
+      --wait --timeout 10m
+  become_user: ubuntu
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+  args:
+    creates: /home/ubuntu/.monitoring-installed
+
+- name: Mark monitoring as installed
+  file:
+    path: /home/ubuntu/.monitoring-installed
+    state: touch
+    owner: ubuntu
+    group: ubuntu

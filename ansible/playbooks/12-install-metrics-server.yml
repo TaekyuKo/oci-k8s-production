@@ -1,0 +1,23 @@
+---
+# Metrics Server 설치 (리소스 사용량 모니터링)
+
+- name: Install Kubernetes Metrics Server
+  hosts: k8s_master[0]
+  become: yes
+  roles:
+    - metrics-server
+  
+  post_tasks:
+    - name: Test kubectl top nodes
+      shell: kubectl top nodes
+      become_user: ubuntu
+      environment:
+        KUBECONFIG: /home/ubuntu/.kube/config
+      register: top_nodes
+      changed_when: false
+      failed_when: false
+      
+    - name: Display resource usage
+      debug:
+        msg: "{{ top_nodes.stdout_lines }}"
+      when: top_nodes.rc == 0

@@ -1,0 +1,22 @@
+---
+# Cilium CNI 설치 (eBPF 기반 네트워킹)
+
+- name: Install Cilium CNI
+  hosts: k8s_master[0]
+  become: yes
+  roles:
+    - cilium
+  
+  post_tasks:
+    - name: Wait for Cilium pods to be ready
+      shell: kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=cilium-agent -n kube-system --timeout=300s
+      changed_when: false
+      
+    - name: Verify Cilium status
+      shell: kubectl -n kube-system get pods -l app.kubernetes.io/name=cilium
+      register: cilium_status
+      changed_when: false
+      
+    - name: Display Cilium status
+      debug:
+        msg: "{{ cilium_status.stdout_lines }}"

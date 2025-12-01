@@ -1,0 +1,25 @@
+---
+# Gateway API CRDs 및 컨트롤러 설치
+
+- name: Install Gateway API CRDs
+  shell: |
+    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v{{ gateway_api_version }}/standard-install.yaml
+  become_user: ubuntu
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+  args:
+    creates: /home/ubuntu/.gateway-api-installed
+
+- name: Mark Gateway API as installed
+  file:
+    path: /home/ubuntu/.gateway-api-installed
+    state: touch
+    owner: ubuntu
+    group: ubuntu
+
+- name: Wait for Gateway API CRDs to be established
+  shell: kubectl wait --for condition=established --timeout=60s crd/gateways.gateway.networking.k8s.io
+  become_user: ubuntu
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+  changed_when: false

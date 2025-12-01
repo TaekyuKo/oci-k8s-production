@@ -1,0 +1,29 @@
+---
+# Loki + Promtail 로깅 스택 설치
+
+- name: Create logging namespace
+  shell: kubectl create namespace logging --dry-run=client -o yaml | kubectl apply -f -
+  become_user: ubuntu
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+
+- name: Install Loki stack
+  shell: |
+    helm upgrade --install loki grafana/loki-stack \
+      --namespace logging \
+      --set loki.persistence.enabled=true \
+      --set loki.persistence.size=10Gi \
+      --set promtail.enabled=true \
+      --wait --timeout 10m
+  become_user: ubuntu
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+  args:
+    creates: /home/ubuntu/.logging-installed
+
+- name: Mark logging as installed
+  file:
+    path: /home/ubuntu/.logging-installed
+    state: touch
+    owner: ubuntu
+    group: ubuntu

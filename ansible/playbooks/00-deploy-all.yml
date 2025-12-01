@@ -1,0 +1,64 @@
+---
+# 전체 자동 배포 플레이북
+# 사용법: ansible-playbook playbooks/00-deploy-all.yml
+
+- name: "=== Stage 1: Prepare All Nodes ==="
+  import_playbook: 01-prepare-nodes.yml
+
+- name: "=== Stage 2: Install Kubernetes ==="
+  import_playbook: 02-install-k8s.yml
+
+- name: "=== Stage 3: Initialize Cluster ==="
+  import_playbook: 03-init-cluster.yml
+
+- name: "=== Stage 4: Install Cilium CNI ==="
+  import_playbook: 04-install-cilium.yml
+
+- name: "=== Stage 5: Install Helm ==="
+  import_playbook: 05-install-helm.yml
+
+- name: "=== Stage 6: Install Gateway API ==="
+  import_playbook: 06-install-gateway-api.yml
+
+- name: "=== Stage 7: Install Monitoring (Prometheus + Grafana) ==="
+  import_playbook: 07-install-monitoring.yml
+
+- name: "=== Stage 8: Install Logging (Loki + Promtail) ==="
+  import_playbook: 08-install-logging.yml
+
+- name: "=== Stage 9: Install ArgoCD ==="
+  import_playbook: 09-install-argocd.yml
+
+- name: "=== Stage 10: Install Sealed Secrets ==="
+  import_playbook: 10-install-secrets.yml
+
+- name: "=== Stage 11: Install Cert-Manager ==="
+  import_playbook: 11-install-cert-manager.yml
+
+- name: "=== Stage 12: Install Metrics Server ==="
+  import_playbook: 12-install-metrics-server.yml
+
+- name: "=== Deployment Complete ==="
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Display completion message
+      debug:
+        msg:
+          - "========================================="
+          - "✅ Kubernetes Production Cluster Ready!"
+          - "========================================="
+          - ""
+          - "Next steps:"
+          - "  1. Configure kubectl:"
+          - "     scp ubuntu@{{ hostvars[groups['k8s_master'][0]]['ansible_host'] }}:/home/ubuntu/.kube/config ~/.kube/config"
+          - ""
+          - "  2. Access ArgoCD:"
+          - "     https://{{ hostvars[groups['k8s_master'][0]]['ansible_host'] }}:30080"
+          - "     Get password: kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d"
+          - ""
+          - "  3. Access Grafana:"
+          - "     http://{{ hostvars[groups['k8s_master'][0]]['ansible_host'] }}:30000"
+          - "     Get password: kubectl get secret -n monitoring grafana -o jsonpath='{.data.admin-password}' | base64 -d"
+          - ""
+          - "========================================="

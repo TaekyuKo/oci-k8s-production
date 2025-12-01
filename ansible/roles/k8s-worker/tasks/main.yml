@@ -1,0 +1,31 @@
+---
+# Worker Node를 클러스터에 조인
+
+- name: Check if node is already joined
+  stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: kubelet_conf
+
+- name: Join worker node to cluster
+  shell: "{{ hostvars['localhost']['join_command'] }}"
+  when: not kubelet_conf.stat.exists
+
+- name: Wait for node to be ready
+  wait_for:
+    timeout: 30
+  delegate_to: localhost
+  when: not kubelet_conf.stat.exists
+
+- name: Label worker node with worker role
+  shell: kubectl label node k8s-worker node-role.kubernetes.io/worker=worker --overwrite
+  delegate_to: "{{ groups['k8s_master'][0] }}"
+  become_user: ubuntu
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+  failed_when: false
+  register: label_result
+
+- name: Display worker role label result
+  debug:
+    msg: "✓ Worker node labeled with role: worker"
+  when: label_result.rc == 0
