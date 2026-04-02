@@ -176,10 +176,10 @@ ansible-playbook playbooks/site.yml
 
 ### **4. 접속**
 ```bash
-# Master (Ephemeral IP - Terraform output에서 확인)
+# Master (Ephemeral IP - OCI 콘솔에서 확인)
 ssh ubuntu@<master-ip>
 
-# Worker (Reserved IP)
+# Worker (Reserved IP - 고정)
 ssh ubuntu@$(terraform output -raw primary_worker_ip)
 
 # kubeconfig
@@ -187,6 +187,8 @@ mkdir -p ~/.kube
 scp ubuntu@<master-ip>:/home/ubuntu/.kube/config ~/.kube/config
 kubectl get nodes
 ```
+
+> 💡 Master는 Ephemeral IP로 인스턴스 재시작 시 변경될 수 있습니다. Worker는 Reserved IP로 고정되어 애플리케이션 접근에 사용됩니다.
 
 ---
 
@@ -280,8 +282,18 @@ cd terraform && terraform destroy -auto-approve
 |--------|------|------|
 | VCN | 1 | 2 |
 | Reserved Public IP | 1 (Worker) | 1 |
+| Ephemeral Public IP | 1 (Master) | 무제한 (무료) |
 | 아웃바운드 전송 | - | 10TB/월 |
 
-**월 예상 비용: $0** (프리티어 한도 내 완전 무료)
+**IP 할당 전략:**
+- **Master 노드**: Ephemeral IP (임시 IP, 무료)
+  - 관리 목적으로만 사용 (kubectl, SSH)
+  - 인스턴스 재시작 시 IP 변경 가능
+  - OCI 콘솔에서 현재 IP 확인 필요
+  
+- **Worker 노드**: Reserved IP (예약 IP, 프리티어 1개 무료)
+  - 애플리케이션 트래픽 처리
+  - 고정 IP로 DNS 설정 가능
+  - NodePort 서비스 안정적 접근
 
-> 💡 Worker 노드에 Reserved IP를 할당하여 애플리케이션 트래픽을 안정적으로 처리합니다.
+**월 예상 비용: $0** (프리티어 한도 내 완전 무료)
