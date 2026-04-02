@@ -146,46 +146,22 @@ terraform init
 terraform apply -auto-approve
 ```
 
-#### **3-2. Block Volume 마운트 (수동 필수)**
+#### **3-2. Block Volume 연결 (수동 필수)**
 
-Terraform이 Block Volume을 생성하고 attach하지만, 노드에서 마운트는 수동으로 해야 합니다.
+Terraform이 Block Volume을 생성하지만, iSCSI 연결은 각 노드에서 수동으로 해야 합니다.
 
-**각 노드에 SSH 접속:**
+**각 노드에 SSH 접속 후:**
 ```bash
-# Master 노드
-ssh ubuntu@<master-ip>
+# OCI Console → Compute → Instances → Attached Block Volumes
+# → iSCSI Commands and Information 복사 후 실행
 
-# Worker 노드
-ssh ubuntu@<worker-ip>
-```
-
-**iSCSI 디스크 연결 및 마운트:**
-```bash
-# 1. iSCSI 명령어 확인 (OCI 콘솔에서 복사)
-# OCI Console → Compute → Instances → Attached Block Volumes → iSCSI Commands
-
-# 2. iSCSI 연결 (예시)
+# 예시:
 sudo iscsiadm -m node -o new -T <IQN> -p <IP>:3260
 sudo iscsiadm -m node -o update -T <IQN> -n node.startup -v automatic
 sudo iscsiadm -m node -T <IQN> -p <IP>:3260 -l
-
-# 3. 디스크 확인
-lsblk  # sdb 또는 sdc로 보임
-
-# 4. 파티션 생성 및 포맷
-sudo parted /dev/sdb mklabel gpt
-sudo parted /dev/sdb mkpart primary ext4 0% 100%
-sudo mkfs.ext4 /dev/sdb1
-
-# 5. 마운트
-sudo mkdir -p /mnt/longhorn
-sudo mount /dev/sdb1 /mnt/longhorn
-
-# 6. 부팅 시 자동 마운트
-echo '/dev/sdb1 /mnt/longhorn ext4 defaults,_netdev 0 0' | sudo tee -a /etc/fstab
 ```
 
-> 📌 **중요**: Master와 Worker 모두 이 작업을 해야 Longhorn이 스토리지를 인식합니다.
+> 📌 **중요**: Master와 Worker 모두 실행해야 Longhorn이 디스크를 인식합니다. 포맷/마운트는 Longhorn이 자동으로 처리합니다.
 
 #### **3-3. Ansible로 클러스터 구축**
 ```bash
@@ -244,30 +220,20 @@ prometheus_chart_version: "80.0.0"   # Prometheus
 
 ### **Longhorn 스토리지 설정**
 
-Longhorn이 Block Volume을 인식하려면 각 노드에서 디스크를 마운트해야 합니다.
-
-**확인:**
+**디스크 확인:**
 ```bash
-# Longhorn이 인식한 디스크 확인
-kubectl get nodes -o json | jq '.items[].status.allocatable."storage"'
-
 # Longhorn UI에서 Node 탭 확인
 # http://<master-ip>:30088
+
+# CLI로 확인
+kubectl get nodes -o json | jq '.items[].metadata.name'
 ```
 
-**디스크 추가 (노드당):**
+**추가 디스크 연결 (선택사항):**
 ```bash
 # 1. OCI 콘솔에서 Block Volume 생성 및 attach
-# 2. 노드에서 iSCSI 연결 (콘솔에서 명령어 복사)
-# 3. 파티션 생성 및 마운트
-sudo parted /dev/sdb mklabel gpt
-sudo parted /dev/sdb mkpart primary ext4 0% 100%
-sudo mkfs.ext4 /dev/sdb1
-sudo mkdir -p /mnt/longhorn-disk2
-sudo mount /dev/sdb1 /mnt/longhorn-disk2
-echo '/dev/sdb1 /mnt/longhorn-disk2 ext4 defaults,_netdev 0 0' | sudo tee -a /etc/fstab
-
-# 4. Longhorn UI에서 Node → Edit Node → Add Disk
+# 2. 노드에서 iSCSI 명령어 실행 (콘솔에서 복사)
+# 3. Longhorn이 자동으로 디스크 인식 및 사용
 ```
 
 ### **Sealed Secret 생성**
