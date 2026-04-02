@@ -1,27 +1,46 @@
 ---
-# Cilium CLI 설치 및 Cilium CNI 배포
+- name: Set Cilium CLI architecture
+  set_fact:
+    cilium_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
 
 - name: Download Cilium CLI
   get_url:
-    url: https://github.com/cilium/cilium-cli/releases/download/v{{ cilium_cli_version }}/cilium-linux-arm64.tar.gz
-    dest: /tmp/cilium-linux-arm64.tar.gz
+    url: "https://github.com/cilium/cilium-cli/releases/download/v{{ cilium_cli_version }}/cilium-linux-{{ cilium_arch }}.tar.gz"
+    dest: "/tmp/cilium-linux-{{ cilium_arch }}.tar.gz"
     mode: '0644'
 
 - name: Extract Cilium CLI
   unarchive:
-    src: /tmp/cilium-linux-arm64.tar.gz
+    src: "/tmp/cilium-linux-{{ cilium_arch }}.tar.gz"
     dest: /usr/local/bin
     remote_src: yes
     creates: /usr/local/bin/cilium
 
-- name: Install Cilium CNI with VXLAN tunnel
+- name: Add Cilium Helm repository
+  command: helm repo add cilium https://helm.cilium.io/
+  become_user: ubuntu
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+  failed_when: false
+
+- name: Update Helm repositories
+  command: helm repo update
+  become_user: ubuntu
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+
+- name: Install Cilium CNI via Helm
   shell: |
-    cilium install \
-      --version {{ cilium_version }} \
+    helm upgrade --install cilium cilium/cilium \
+      --version {{ cilium_chart_version }} \
+      --namespace kube-system \
       --set ipam.mode=kubernetes \
       --set routingMode=tunnel \
       --set tunnelProtocol=vxlan \
-      --set kubeProxyReplacement=false
+      --set kubeProxyReplacement=false \
+      --set hubble.relay.enabled={{ cilium_enable_hubble | lower }} \
+      --set hubble.ui.enabled={{ cilium_enable_hubble | lower }} \
+      --wait --timeout 10m
   become_user: ubuntu
   environment:
     KUBECONFIG: /home/ubuntu/.kube/config
@@ -34,3 +53,14 @@
     state: touch
     owner: ubuntu
     group: ubuntu
+
+- name: Wait for Cilium to be ready
+  shell: cilium status --wait
+  become_user: ubuntu
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+  changed_when: false
+  register: cilium_wait
+  until: cilium_wait.rc == 0
+  retries: 5
+  delay: 15

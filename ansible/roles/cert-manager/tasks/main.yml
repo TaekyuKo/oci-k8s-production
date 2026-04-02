@@ -1,13 +1,4 @@
 ---
-# Cert-Manager 자동 TLS 인증서 관리자 설치
-
-- name: Install Cert-Manager CRDs
-  shell: |
-    kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v{{ cert_manager_version }}/cert-manager.crds.yaml
-  become_user: ubuntu
-  environment:
-    KUBECONFIG: /home/ubuntu/.kube/config
-
 - name: Create cert-manager namespace
   shell: kubectl create namespace cert-manager --dry-run=client -o yaml | kubectl apply -f -
   become_user: ubuntu
@@ -19,6 +10,7 @@
     helm upgrade --install cert-manager jetstack/cert-manager \
       --namespace cert-manager \
       --version v{{ cert_manager_version }} \
+      --set crds.enabled=true \
       --wait --timeout 5m
   become_user: ubuntu
   environment:

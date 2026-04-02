@@ -1,10 +1,9 @@
 ---
-# Sealed Secrets Controller 설치
-
 - name: Install Sealed Secrets controller
   shell: |
     helm upgrade --install sealed-secrets sealed-secrets/sealed-secrets \
       --namespace kube-system \
+      --version {{ sealed_secrets_chart_version }} \
       --wait --timeout 5m
   become_user: ubuntu
   environment:
@@ -12,9 +11,13 @@
   args:
     creates: /home/ubuntu/.sealed-secrets-installed
 
+- name: Set kubeseal architecture
+  set_fact:
+    kubeseal_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+
 - name: Download kubeseal CLI
   get_url:
-    url: https://github.com/bitnami-labs/sealed-secrets/releases/download/v{{ sealed_secrets_version }}/kubeseal-{{ sealed_secrets_version }}-linux-amd64.tar.gz
+    url: "https://github.com/bitnami-labs/sealed-secrets/releases/download/v{{ sealed_secrets_app_version }}/kubeseal-{{ sealed_secrets_app_version }}-linux-{{ kubeseal_arch }}.tar.gz"
     dest: /tmp/kubeseal.tar.gz
     mode: '0644'
 

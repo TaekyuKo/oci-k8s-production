@@ -1,6 +1,4 @@
 ---
-# Helm 패키지 매니저 설치
-
 - name: Download Helm installation script
   get_url:
     url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
@@ -24,11 +22,13 @@
   environment:
     KUBECONFIG: /home/ubuntu/.kube/config
   loop:
+    - { name: "cilium", url: "https://helm.cilium.io/" }
     - { name: "prometheus-community", url: "https://prometheus-community.github.io/helm-charts" }
     - { name: "grafana", url: "https://grafana.github.io/helm-charts" }
     - { name: "argo", url: "https://argoproj.github.io/argo-helm" }
     - { name: "jetstack", url: "https://charts.jetstack.io" }
     - { name: "sealed-secrets", url: "https://bitnami-labs.github.io/sealed-secrets" }
+    - { name: "longhorn", url: "https://charts.longhorn.io" }
   failed_when: false
 
 - name: Update Helm repositories

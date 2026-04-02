@@ -1,0 +1,16 @@
+---
+# Longhorn 분산 스토리지 - prerequisites (모든 노드에서 실행)
+
+- name: Install Longhorn prerequisites
+  apt:
+    name:
+      - open-iscsi
+      - nfs-common
+      - util-linux
+    state: present
+
+- name: Enable and start iscsid
+  systemd:
+    name: iscsid
+    enabled: yes
+    state: started

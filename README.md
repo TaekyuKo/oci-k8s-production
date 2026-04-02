@@ -4,7 +4,7 @@
 
 [![Terraform](https://img.shields.io/badge/Terraform-%3E%3D1.0-blue?logo=terraform)](https://www.terraform.io/)
 [![Ansible](https://img.shields.io/badge/Ansible-%3E%3D2.14-red?logo=ansible)](https://www.ansible.com/)
-[![Kubernetes](https://img.shields.io/badge/Kubernetes-v1.31-326CE5?logo=kubernetes)](https://kubernetes.io/)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-v1.35-326CE5?logo=kubernetes)](https://kubernetes.io/)
 [![OCI](https://img.shields.io/badge/OCI-Free%20Tier-red?logo=oracle)](https://www.oracle.com/cloud/free/)
 
 Oracle Cloud Infrastructure에서 Terraform과 Ansible을 활용한 프로덕션급 Kubernetes 클러스터 완전 자동 구축.
@@ -14,7 +14,8 @@ Oracle Cloud Infrastructure에서 Terraform과 Ansible을 활용한 프로덕션
 ## 🎯 특징
 
 - ⚡ **원클릭 배포**: 인프라부터 애드온까지 완전 자동화
-- 📊 **Observability**: Prometheus, Grafana, Loki 기본 탑재
+- � **분산 스토리지**: Longhorn으로 PVC 동적 프로비저닝
+- �📊 **Observability**: Prometheus, Grafana, Loki 기본 탑재
 - 🚀 **GitOps Ready**: ArgoCD로 즉시 CD 파이프라인 구축
 - 💰 **프리티어**: OCI Free Tier 범위 내 무료 운영
 
@@ -25,25 +26,26 @@ Oracle Cloud Infrastructure에서 Terraform과 Ansible을 활용한 프로덕션
 ### **인프라 (Terraform)**
 - VCN + Subnet + Security List
 - Compute Instances (ARM64 Ampere A1)
-- Block Volumes
+- Block Volumes (Longhorn 백엔드 스토리지)
 - Reserved Public IP
 
 ### **Kubernetes 기본**
 - **Runtime**: containerd 1.7.28
-- **Kubernetes**: v1.31.14
-- **CNI**: Cilium v1.16.5 (eBPF, VXLAN tunnel)
-- **Gateway API**: Kubernetes Gateway API CRDs
+- **Kubernetes**: v1.35.2
+- **CNI**: Cilium v1.19.1 (eBPF, VXLAN tunnel, Hubble UI)
+- **Gateway API**: v1.2.1
 
 ### **애드온 스택**
 | 카테고리 | 컴포넌트 | 버전 | 용도 |
 |---------|---------|------|------|
-| 📦 Package | Helm | 3.19.2 | 패키지 관리 |
-| 📊 Monitoring | Prometheus + Grafana | - | 메트릭 수집/시각화 |
-| 📋 Logging | Loki + Promtail | - | 로그 수집/조회 |
-| 🔄 GitOps | ArgoCD | - | 선언적 배포 |
-| 🔐 Secrets | Sealed Secrets | - | 암호화된 Secret 관리 |
-| 🔒 TLS | Cert-Manager | - | 인증서 자동화 |
-| 📈 Metrics | Metrics Server | - | kubectl top 지원 |
+| 📦 Package | Helm | 3.x | 패키지 관리 |
+| 💾 Storage | Longhorn | v1.7.2 (chart 1.7.2) | 분산 블록 스토리지 / 기본 StorageClass |
+| 📊 Monitoring | kube-prometheus-stack | chart 79.9.0 | 메트릭 수집/시각화 |
+| 📋 Logging | Loki + Promtail | loki-stack chart 2.10.3 | 로그 수집/조회 |
+| 🔄 GitOps | ArgoCD | v2.13.2 | 선언적 배포 |
+| 🔐 Secrets | Sealed Secrets | chart 2.17.9 (app 0.33.1) | 암호화된 Secret 관리 |
+| 🔒 TLS | Cert-Manager | v1.16.2 | 인증서 자동화 |
+| 📈 Metrics | Metrics Server | v0.7.2 | kubectl top 지원 |
 
 ---
 
@@ -62,19 +64,20 @@ oci-k8s-production/
 │   ├── inventory/
 │   │   ├── hosts.ini                   # Terraform이 자동 생성
 │   │   └── group_vars/
-│   │       ├── all.yml                 # 전역 변수
+│   │       ├── all.yml                 # 전역 변수 (버전 관리)
 │   │       ├── k8s_master.yml          # Master 노드 변수
 │   │       └── k8s_workers.yml         # Worker 노드 변수
 │   │
-│   ├── roles/                          # 14개 Role
+│   ├── roles/                          # 15개 Role
 │   │   ├── common/                     # 시스템 기본 설정
 │   │   ├── containerd/                 # Container Runtime
 │   │   ├── kubernetes/                 # kubeadm, kubelet, kubectl
 │   │   ├── k8s-master/                 # Master 노드 초기화
 │   │   ├── k8s-worker/                 # Worker 노드 조인
-│   │   ├── cilium/                     # Cilium CNI (VXLAN)
+│   │   ├── cilium/                     # Cilium CNI (VXLAN, Hubble)
 │   │   ├── gateway-api/                # Gateway API CRDs
 │   │   ├── helm/                       # Helm 패키지 매니저
+│   │   ├── longhorn/                   # Longhorn 분산 스토리지
 │   │   ├── monitoring/                 # Prometheus + Grafana
 │   │   ├── logging/                    # Loki + Promtail
 │   │   ├── argocd/                     # ArgoCD GitOps
@@ -82,23 +85,17 @@ oci-k8s-production/
 │   │   ├── cert-manager/               # Cert-Manager
 │   │   └── metrics-server/             # Metrics Server
 │   │
-│   └── playbooks/                      # 12개 플레이북
-│       ├── 01-prepare-nodes.yml        # 노드 준비
-│       ├── 02-install-k8s.yml          # Kubernetes 설치
-│       ├── 03-init-cluster.yml         # 클러스터 초기화
-│       ├── 04-install-cilium.yml       # CNI 설치
-│       ├── 05-install-helm.yml         # Helm 설치
-│       ├── 06-install-gateway-api.yml  # Gateway API
-│       ├── 07-install-monitoring.yml   # Prometheus + Grafana
-│       ├── 08-install-logging.yml      # Loki + Promtail
-│       ├── 09-install-argocd.yml       # ArgoCD
-│       ├── 10-install-secrets.yml      # Sealed Secrets
-│       ├── 11-install-cert-manager.yml # Cert-Manager
-│       └── 12-install-metrics-server.yml # Metrics Server
+│   └── playbooks/
+│       ├── site.yml                    # 초기 배포 (전체)
+│       └── upgrade.yml                 # 버전 업그레이드
 │
-└── scripts/
-    ├── deploy.sh                       # 전체 자동 배포
-    └── destroy.sh                      # 전체 삭제
+├── scripts/
+│   ├── deploy.sh                       # 초기 배포 자동화
+│   ├── upgrade.sh                      # 업그레이드 자동화
+│   └── destroy.sh                      # 클러스터 삭제
+│
+└── docs/
+    └── components.md                   # 컴포넌트 상세 설명
 ```
 
 ---
@@ -118,7 +115,7 @@ ansible --version  # >= 2.14
 tenancy_ocid     = "ocid1.tenancy.oc1..aaaaaaa******************"
 user_ocid        = "ocid1.user.oc1..aaaaaaa******************"
 fingerprint      = "aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99"
-private_key_path = "C:\\Users\\<username>\\OCI_Security\\oci_api_key.pem"
+private_key_path = "/path/to/oci_api_key.pem"
 region           = "ap-chuncheon-1"  # 또는 ap-seoul-1
 
 compartment_ocid = "ocid1.tenancy.oc1..aaaaaaa******************"
@@ -137,19 +134,24 @@ instance_memory  = 12
 **📌 OCI 정보 확인**:
 - **Tenancy/User/Compartment OCID**: OCI Console → Profile → Tenancy/User Settings
 - **Fingerprint**: Profile → API Keys → Add API Key
-- **Private Key**: API Key 생성 시 다운로드한 `.pem` 파일 경로 (Windows는 `\\` 사용)
-- **SSH Public Key**: `ssh-keygen -t rsa -b 2048` 로 생성 후 `.pub` 파일 내용
+- **Private Key**: API Key 생성 시 다운로드한 `.pem` 파일 경로
+- **SSH Public Key**: `ssh-keygen -t ed25519` 로 생성 후 `.pub` 파일 내용
 
-### **3. 배포 (원클릭)**
+### **3. 초기 배포 (처음 클러스터 구축)**
 ```bash
+# 원클릭 (Terraform + Ansible 자동 실행)
 ./scripts/deploy.sh
+
+# 또는 수동
+cd terraform
+terraform init
+terraform apply -auto-approve
+
+cd ../ansible
+ansible-playbook playbooks/site.yml
 ```
 
-또는 수동:
-```bash
-cd terraform && terraform apply -auto-approve
-cd ../ansible && ansible-playbook playbooks/00-deploy-all.yml
-```
+**예상 소요 시간**: 약 20-30분
 
 ### **4. 접속**
 ```bash
@@ -172,126 +174,93 @@ kubectl get nodes
 |--------|-----|------|-------------|
 | **Grafana** | `http://<master-ip>:30000` | admin | `kubectl get secret -n monitoring prometheus-grafana -o jsonpath='{.data.admin-password}' \| base64 -d` |
 | **Prometheus** | `http://<master-ip>:30090` | - | 인증 없음 |
-| **ArgoCD** | `http://<master-ip>:30080` | admin | `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' \| base64 -d` |
+| **ArgoCD** | `https://<master-ip>:30080` | admin | `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' \| base64 -d` |
+| **Longhorn UI** | `http://<master-ip>:30088` | - | 인증 없음 |
 
 ---
 
-## 🔧 관리
+## � 관리
+
+### **클러스터 버전 업그레이드**
+
+주기적으로 Kubernetes 및 애드온 버전을 업그레이드할 때 사용:
+
+```bash
+# 1. 버전 변경
+vim ansible/inventory/group_vars/all.yml
+
+# 예시: kubernetes_version: "1.35" → "1.36"
+#      cilium_chart_version: "1.19.1" → "1.20.0"
+
+# 2. 원클릭 업그레이드
+./scripts/upgrade.sh
+
+# 또는 수동
+cd ansible
+ansible-playbook playbooks/upgrade.yml
+```
+
+**업그레이드 프로세스**:
+1. Kubernetes 컴포넌트 업그레이드 (kubeadm, kubelet, kubectl)
+2. Master 노드: drain → kubeadm upgrade → uncordon
+3. Worker 노드: 순차적으로 drain → upgrade → uncordon
+4. 모든 애드온 Helm 차트 업그레이드
+
+**예상 소요 시간**: 약 15-20분
+
+> ⚠️ 업그레이드 중 일시적으로 워크로드가 재스케줄링될 수 있습니다.
 
 ### **워커 노드 추가**
 ```bash
 # terraform/terraform.tfvars 수정
-worker_count = 3
+worker_count = 2
 
 terraform apply
-ansible-playbook ansible/playbooks/02-install-k8s.yml --limit k8s_workers
+ansible-playbook playbooks/site.yml --limit k8s_workers
 ```
 
-### **애드온 재설치**
+### **Sealed Secret 생성**
 ```bash
-ansible-playbook ansible/playbooks/07-install-monitoring.yml
-ansible-playbook ansible/playbooks/09-install-argocd.yml
+# 클러스터 공개키로 암호화
+kubectl create secret generic mysecret \
+  --dry-run=client --from-literal=password=mysecretpassword -o yaml | \
+  kubeseal -o yaml > mysealedsecret.yaml
+
+# Git에 커밋 후 ArgoCD가 자동 배포
 ```
-
-### **Block Volume 마운트 (추가 스토리지)**
-
-Terraform이 각 노드에 50GB Block Volume을 생성했습니다. 사용하려면 iSCSI로 연결 후 마운트해야 합니다.
-
-#### **1. iSCSI 명령어 확인 (OCI 콘솔)**
-1. **Compute** → **Instances** → 해당 노드 클릭
-2. **Resources** → **Attached Block Volumes**
-3. Block Volume 이름 클릭 → **iSCSI Commands and Information** 탭
-4. 표시된 **3개 명령어** 복사
-
-#### **2. iSCSI 연결 (각 노드에서 실행)**
-```bash
-# SSH로 노드 접속
-ssh ubuntu@<node-ip>
-
-# OCI 콘솔에서 복사한 명령어 3개 실행 (예시 - 실제 값은 콘솔에서 확인)
-sudo iscsiadm -m node -o new -T iqn.2015-12.com.oracleiaas:xxxxxx -p xxx.xxx.x.x:3260
-sudo iscsiadm -m node -o update -T iqn.2015-12.com.oracleiaas:xxxxxx -n node.startup -v automatic
-sudo iscsiadm -m node -T iqn.2015-12.com.oracleiaas:xxxxxx -p xxx.xxx.x.x:3260 -l
-
-# 연결된 디스크 확인
-lsblk
-# 출력: sdb (50GB) 확인
-```
-
-#### **3. 파일시스템 생성 및 마운트 (최초 1회)**
-```bash
-# 파일시스템 생성
-sudo mkfs.ext4 /dev/sdb
-
-# 마운트 포인트 생성
-sudo mkdir -p /data
-
-# 마운트
-sudo mount /dev/sdb /data
-
-# 재부팅 후 자동 마운트 설정
-UUID=$(sudo blkid -s UUID -o value /dev/sdb)
-echo "UUID=$UUID /data ext4 defaults,nofail,_netdev 0 2" | sudo tee -a /etc/fstab
-
-# 확인
-df -h /data
-```
-
-#### **4. 사용 예시**
-```bash
-# Prometheus 데이터 디렉토리로 사용
-sudo mkdir -p /data/prometheus
-sudo chown -R 65534:65534 /data/prometheus  # nobody:nogroup
-
-# Loki 데이터 디렉토리로 사용
-sudo mkdir -p /data/loki
-sudo chown -R 10001:10001 /data/loki
-
-# 일반 애플리케이션 PV로 사용
-sudo mkdir -p /data/apps
-sudo chmod 777 /data/apps
-```
-
-> 💡 **Tip**: `/data` 디렉토리는 컨테이너에서 hostPath로 마운트하여 영구 스토리지로 활용 가능
 
 ### **클러스터 삭제**
 ```bash
 cd terraform && terraform destroy -auto-approve
 ```
 
-> ⚠️ **주의**: Block Volume의 모든 데이터가 영구 삭제됩니다. 중요 데이터는 사전 백업 필수!
+> ⚠️ Block Volume의 모든 데이터가 영구 삭제됩니다. 중요 데이터는 사전 백업 필수.
 
 ---
 
 ## 📈 리소스 (OCI Free Tier)
 
-### **컴퓨트 (Compute)**
-| 리소스 | 노드 | 개수 | OCPU/노드 | Memory/노드 | 합계 OCPU | 합계 Memory |
-|--------|------|------|-----------|-------------|-----------|-------------|
-| Master | VM.Standard.A1.Flex | 1 | 2 | 12GB | 2 | 12GB |
-| Worker | VM.Standard.A1.Flex | 1 | 2 | 12GB | 2 | 12GB |
-| **총합** | - | **2** | - | - | **4 / 4** | **24GB / 24GB** |
+### **컴퓨트**
+| 노드 | Shape | OCPU | Memory | 합계 |
+|------|-------|------|--------|------|
+| Master × 1 | VM.Standard.A1.Flex | 2 | 12GB | - |
+| Worker × 1 | VM.Standard.A1.Flex | 2 | 12GB | - |
+| **총합** | - | **4 / 4** | **24GB / 24GB** | ✅ 프리티어 한도 |
 
-### **스토리지 (Storage)**
-| 리소스 | 노드당 크기 | 개수 | 총 사용량 | 프리티어 한도 |
-|--------|------------|------|-----------|--------------|
-| Boot Volume | 50GB | 2 | 100GB | - |
-| Block Volume | 50GB | 2 | 100GB | - |
-| **총합** | - | **4** | **200GB** | **200GB (통합)** |
+### **스토리지**
+| 리소스 | 크기 | 개수 | 합계 |
+|--------|------|------|------|
+| Boot Volume | 50GB | 2 | 100GB |
+| Block Volume (Longhorn) | 50GB | 2 | 100GB |
+| **총합** | - | **4** | **200GB / 200GB** ✅ |
 
-> 💡 OCI Free Tier는 Boot + Block Volume 합계 200GB 제공 (각각 100GB 아님)
+> OCI Free Tier는 Boot + Block Volume 합계 200GB 제공
 
-### **네트워크 (Network)**
-| 리소스 | 사용량 | 프리티어 한도 |
-|--------|--------|--------------|
+### **네트워크**
+| 리소스 | 사용 | 한도 |
+|--------|------|------|
 | VCN | 1 | 2 |
-| Subnet | 1 | VCN당 제한 없음 |
-| Internet Gateway | 1 | VCN당 1개 |
 | Reserved Public IP | 1 (Master) | 1 |
-| Ephemeral Public IP | 1 (Worker) | 제한 없음 |
-| **아웃바운드 데이터 전송** | - | **10TB/월** |
+| 아웃바운드 전송 | - | 10TB/월 |
 
-### **💰 비용 예상**
-- **프리티어 사용률**: OCPU 100% (4/4), Memory 100% (24GB/24GB), Storage 100% (200GB/200GB)
-- **월 예상 비용**: **$0** (완전 무료)
-- **주의사항**: 프리티어 한도 초과 시 자동 과금 (노드 추가 시 주의)
+**월 예상 비용: $0** (프리티어 한도 내 완전 무료)

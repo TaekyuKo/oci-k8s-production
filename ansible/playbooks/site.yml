@@ -1,0 +1,115 @@
+---
+# OCI Kubernetes Production Cluster - 초기 배포
+# 사용법: ansible-playbook playbooks/site.yml
+# 
+# 클러스터를 처음부터 구축합니다 (인프라 → k8s → 애드온)
+
+- name: Prepare All Nodes
+  hosts: all
+  become: yes
+  roles:
+    - common
+    - containerd
+    - kubernetes
+
+- name: Initialize Master Node
+  hosts: k8s_master
+  become: yes
+  roles:
+    - k8s-master
+
+- name: Join Worker Nodes
+  hosts: k8s_workers
+  become: yes
+  vars:
+    join_command: "{{ hostvars[groups['k8s_master'][0]]['join_command'] }}"
+  roles:
+    - k8s-worker
+
+- name: Install CNI (Cilium)
+  hosts: k8s_master
+  become: yes
+  roles:
+    - cilium
+
+- name: Install Helm
+  hosts: k8s_master
+  become: yes
+  roles:
+    - helm
+
+- name: Install Gateway API
+  hosts: k8s_master
+  become: yes
+  roles:
+    - gateway-api
+
+- name: Install Longhorn Storage
+  hosts: k8s_master
+  become: yes
+  roles:
+    - longhorn
+
+- name: Install Monitoring Stack
+  hosts: k8s_master
+  become: yes
+  roles:
+    - monitoring
+
+- name: Install Logging Stack
+  hosts: k8s_master
+  become: yes
+  roles:
+    - logging
+
+- name: Install ArgoCD
+  hosts: k8s_master
+  become: yes
+  roles:
+    - argocd
+
+- name: Install Sealed Secrets
+  hosts: k8s_master
+  become: yes
+  roles:
+    - sealed-secrets
+
+- name: Install Cert-Manager
+  hosts: k8s_master
+  become: yes
+  roles:
+    - cert-manager
+
+- name: Install Metrics Server
+  hosts: k8s_master
+  become: yes
+  roles:
+    - metrics-server
+
+- name: Deployment Complete
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Display completion message
+      debug:
+        msg:
+          - "========================================="
+          - "✅ Kubernetes Production Cluster Ready!"
+          - "========================================="
+          - ""
+          - "Next steps:"
+          - "  1. Configure kubectl:"
+          - "     scp ubuntu@{{ hostvars[groups['k8s_master'][0]]['ansible_host'] }}:/home/ubuntu/.kube/config ~/.kube/config"
+          - ""
+          - "  2. Access ArgoCD:"
+          - "     https://{{ hostvars[groups['k8s_master'][0]]['ansible_host'] }}:30080"
+          - "     Get password: kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d"
+          - ""
+          - "  3. Access Grafana:"
+          - "     http://{{ hostvars[groups['k8s_master'][0]]['ansible_host'] }}:30000"
+          - "     Get password: kubectl get secret -n monitoring prometheus-grafana -o jsonpath='{.data.admin-password}' | base64 -d"
+          - ""
+          - "  4. Access Longhorn UI:"
+          - "     http://{{ hostvars[groups['k8s_master'][0]]['ansible_host'] }}:30088"
+          - ""
+          - "========================================="

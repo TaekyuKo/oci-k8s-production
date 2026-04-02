@@ -1,9 +1,4 @@
 ---
-# containerd 설치 및 설정
-# - containerd 패키지 설치
-# - systemd cgroup 드라이버 설정
-# - 서비스 시작 및 활성화
-
 - name: Install containerd
   apt:
     name:

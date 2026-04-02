@@ -51,7 +51,7 @@ if [ ! -f "inventory/hosts.ini" ]; then
     exit 1
 fi
 
-ansible-playbook -i inventory/hosts.ini playbooks/00-deploy-all.yml
+ansible-playbook -i inventory/hosts.ini playbooks/site.yml
 echo ""
 
 echo -e "${GREEN}=========================================${NC}"

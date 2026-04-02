@@ -1,5 +1,8 @@
 ---
-# ArgoCD GitOps 플랫폼 설치
+- name: Check if ArgoCD is already installed
+  stat:
+    path: /home/ubuntu/.argocd-installed
+  register: argocd_installed
 
 - name: Create argocd namespace
   shell: kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
@@ -13,8 +16,14 @@
   become_user: ubuntu
   environment:
     KUBECONFIG: /home/ubuntu/.kube/config
-  args:
-    creates: /home/ubuntu/.argocd-installed
+  when: not argocd_installed.stat.exists
+
+- name: Wait for ArgoCD deployments to be ready
+  shell: kubectl wait --for=condition=available deployment --all -n argocd --timeout=300s
+  become_user: ubuntu
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+  when: not argocd_installed.stat.exists
 
 - name: Patch ArgoCD server service to NodePort
   shell: |
@@ -22,6 +31,7 @@
   become_user: ubuntu
   environment:
     KUBECONFIG: /home/ubuntu/.kube/config
+  when: not argocd_installed.stat.exists
 
 - name: Mark ArgoCD as installed
   file:
@@ -29,3 +39,4 @@
     state: touch
     owner: ubuntu
     group: ubuntu
+  when: not argocd_installed.stat.exists

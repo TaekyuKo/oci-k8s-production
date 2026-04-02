@@ -1,5 +1,8 @@
 ---
-# Metrics Server 설치 (kubectl top 명령어 지원)
+- name: Check if Metrics Server is already installed
+  stat:
+    path: /home/ubuntu/.metrics-server-installed
+  register: metrics_installed
 
 - name: Install Metrics Server
   shell: |
@@ -7,16 +10,16 @@
   become_user: ubuntu
   environment:
     KUBECONFIG: /home/ubuntu/.kube/config
-  args:
-    creates: /home/ubuntu/.metrics-server-installed
+  when: not metrics_installed.stat.exists
 
-- name: Patch Metrics Server for self-signed certificates (개발 환경)
+- name: Patch Metrics Server for self-signed certificates
   shell: |
     kubectl patch deployment metrics-server -n kube-system --type='json' \
       -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--kubelet-insecure-tls"}]'
   become_user: ubuntu
   environment:
     KUBECONFIG: /home/ubuntu/.kube/config
+  when: not metrics_installed.stat.exists
   failed_when: false
 
 - name: Mark Metrics Server as installed
@@ -25,6 +28,7 @@
     state: touch
     owner: ubuntu
     group: ubuntu
+  when: not metrics_installed.stat.exists
 
 - name: Wait for Metrics Server to be ready
   shell: kubectl wait --for=condition=ready pod -l k8s-app=metrics-server -n kube-system --timeout=120s

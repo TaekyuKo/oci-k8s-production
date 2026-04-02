@@ -1,6 +1,4 @@
 ---
-# Gateway API CRDs 및 컨트롤러 설치
-
 - name: Install Gateway API CRDs
   shell: |
     kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v{{ gateway_api_version }}/standard-install.yaml

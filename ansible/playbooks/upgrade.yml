@@ -1,0 +1,134 @@
+---
+# OCI Kubernetes Production Cluster - 업그레이드
+# 사용법: ansible-playbook playbooks/upgrade.yml
+# 
+# 기존 클러스터의 애드온 및 Kubernetes 버전을 업그레이드합니다.
+# group_vars/all.yml에서 버전 변경 후 실행하세요.
+
+- name: Upgrade Kubernetes Components
+  hosts: all
+  become: yes
+  roles:
+    - kubernetes
+
+- name: Upgrade Master Node
+  hosts: k8s_master
+  become: yes
+  tasks:
+    - name: Drain master node
+      shell: kubectl drain {{ inventory_hostname }} --ignore-daemonsets --delete-emptydir-data
+      ignore_errors: yes
+
+    - name: Upgrade kubeadm on master
+      shell: kubeadm upgrade apply v{{ kubernetes_version }} -y
+      register: upgrade_result
+      changed_when: "'Successfully applied' in upgrade_result.stdout"
+
+    - name: Restart kubelet
+      systemd:
+        name: kubelet
+        state: restarted
+        daemon_reload: yes
+
+    - name: Uncordon master node
+      shell: kubectl uncordon {{ inventory_hostname }}
+
+- name: Upgrade Worker Nodes
+  hosts: k8s_workers
+  become: yes
+  serial: 1
+  tasks:
+    - name: Drain worker node
+      shell: kubectl drain {{ inventory_hostname }} --ignore-daemonsets --delete-emptydir-data
+      delegate_to: "{{ groups['k8s_master'][0] }}"
+      ignore_errors: yes
+
+    - name: Upgrade kubeadm on worker
+      shell: kubeadm upgrade node
+      register: upgrade_result
+      changed_when: "'Successfully applied' in upgrade_result.stdout"
+
+    - name: Restart kubelet
+      systemd:
+        name: kubelet
+        state: restarted
+        daemon_reload: yes
+
+    - name: Uncordon worker node
+      shell: kubectl uncordon {{ inventory_hostname }}
+      delegate_to: "{{ groups['k8s_master'][0] }}"
+
+- name: Upgrade CNI (Cilium)
+  hosts: k8s_master
+  become: yes
+  roles:
+    - cilium
+
+- name: Upgrade Gateway API
+  hosts: k8s_master
+  become: yes
+  roles:
+    - gateway-api
+
+- name: Upgrade Longhorn Storage
+  hosts: k8s_master
+  become: yes
+  roles:
+    - longhorn
+
+- name: Upgrade Monitoring Stack
+  hosts: k8s_master
+  become: yes
+  roles:
+    - monitoring
+
+- name: Upgrade Logging Stack
+  hosts: k8s_master
+  become: yes
+  roles:
+    - logging
+
+- name: Upgrade ArgoCD
+  hosts: k8s_master
+  become: yes
+  roles:
+    - argocd
+
+- name: Upgrade Sealed Secrets
+  hosts: k8s_master
+  become: yes
+  roles:
+    - sealed-secrets
+
+- name: Upgrade Cert-Manager
+  hosts: k8s_master
+  become: yes
+  roles:
+    - cert-manager
+
+- name: Upgrade Metrics Server
+  hosts: k8s_master
+  become: yes
+  roles:
+    - metrics-server
+
+- name: Upgrade Complete
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Display completion message
+      debug:
+        msg:
+          - "========================================="
+          - "✅ Cluster Upgrade Complete!"
+          - "========================================="
+          - ""
+          - "Verify cluster status:"
+          - "  kubectl get nodes"
+          - "  kubectl get pods -A"
+          - ""
+          - "Check component versions:"
+          - "  kubectl version --short"
+          - "  helm list -A"
+          - ""
+          - "========================================="

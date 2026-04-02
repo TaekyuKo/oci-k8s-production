@@ -1,0 +1,74 @@
+---
+- name: Add Longhorn Helm repository
+  command: helm repo add longhorn https://charts.longhorn.io
+  become_user: ubuntu
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+  failed_when: false
+
+- name: Update Helm repositories
+  command: helm repo update
+  become_user: ubuntu
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+
+- name: Create longhorn-system namespace
+  shell: kubectl create namespace longhorn-system --dry-run=client -o yaml | kubectl apply -f -
+  become_user: ubuntu
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+
+- name: Install Longhorn
+  shell: |
+    helm upgrade --install longhorn longhorn/longhorn \
+      --namespace longhorn-system \
+      --version {{ longhorn_chart_version }} \
+      --set defaultSettings.defaultReplicaCount=1 \
+      --set defaultSettings.storageMinimalAvailablePercentage=10 \
+      --set persistence.defaultClassReplicaCount=1 \
+      --set service.ui.type=NodePort \
+      --set service.ui.nodePort=30088 \
+      --wait --timeout 15m
+  become_user: ubuntu
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+  args:
+    creates: /home/ubuntu/.longhorn-installed
+
+- name: Create longhorn-static StorageClass manifest
+  copy:
+    dest: /tmp/longhorn-static-sc.yaml
+    content: |
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      metadata:
+        name: longhorn-static
+      provisioner: driver.longhorn.io
+      allowVolumeExpansion: true
+      reclaimPolicy: Delete
+      volumeBindingMode: Immediate
+      parameters:
+        numberOfReplicas: "1"
+        staleReplicaTimeout: "2880"
+        fromBackup: ""
+        fsType: "ext4"
+
+- name: Apply longhorn-static StorageClass
+  shell: kubectl apply -f /tmp/longhorn-static-sc.yaml
+  become_user: ubuntu
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+
+- name: Mark Longhorn as installed
+  file:
+    path: /home/ubuntu/.longhorn-installed
+    state: touch
+    owner: ubuntu
+    group: ubuntu
+
+- name: Wait for Longhorn to be ready
+  shell: kubectl wait --for=condition=ready pod -l app=longhorn-manager -n longhorn-system --timeout=300s
+  become_user: ubuntu
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+  changed_when: false

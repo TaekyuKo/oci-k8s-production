@@ -1,8 +1,4 @@
 ---
-# Kubernetes 기본 컴포넌트 설치
-# - kubeadm, kubelet, kubectl 설치
-# - 버전 고정 (apt-mark hold)
-
 - name: Add Kubernetes GPG key
   apt_key:
     url: https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_version }}/deb/Release.key

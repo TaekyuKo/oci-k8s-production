@@ -1,46 +1,35 @@
 ---
-# 전역 변수 (OCI Free Tier 최적화)
 cluster_name: "k8s-prod"
-kubernetes_version: "1.31"  # Kubernetes v1.31.x
+kubernetes_version: "1.35"
 
-# 네트워크 (oci_k8s_terraform과 동일)
-pod_network_cidr: "192.168.0.0/16"  # Calico/Cilium 기본값
-service_cidr: "10.96.0.0/12"         # Kubernetes 기본값
-vcn_cidr: "10.0.0.0/16"              # OCI VCN CIDR
+pod_network_cidr: "192.168.0.0/16"
+service_cidr: "10.96.0.0/12"
+vcn_cidr: "10.0.0.0/16"
 
-# ========================================
-# 컴포넌트 버전
-# ========================================
-cilium_version: "1.16.5"
+# Component versions
+cilium_version: "1.19.1"
 cilium_cli_version: "0.16.20"
+cilium_chart_version: "1.19.1"
 gateway_api_version: "1.2.1"
 argocd_version: "2.13.2"
-sealed_secrets_version: "0.27.2"
+sealed_secrets_chart_version: "2.17.9"
+sealed_secrets_app_version: "0.33.1"
 cert_manager_version: "1.16.2"
 metrics_server_version: "0.7.2"
+prometheus_chart_version: "79.9.0"
+loki_stack_chart_version: "2.10.3"
+longhorn_version: "1.7.2"
+longhorn_chart_version: "1.7.2"
 
-# ========================================
-# Cilium 설정 (네트워킹 & 관측성)
-# ========================================
-cilium_enable_hubble: true  # UI로 네트워크 플로우 시각화
+# Cilium settings
+cilium_enable_hubble: true
 
-# ========================================
-# 모니터링 설정
-# ========================================
-prometheus_retention: "7d"  # Free Tier 스토리지 고려
-grafana_admin_password: "admin"  # 초기 비밀번호 (변경 권장)
+# Monitoring settings
+prometheus_retention: "7d"
+grafana_admin_password: "admin"
 
-# ========================================
-# 로깅 설정
-# ========================================
-loki_retention: "3d"  # 단기 보관 (학습용)
+# Logging settings
+loki_retention: "3d"
 
-# ========================================
-# ArgoCD 설정
-# ========================================
-argocd_enable_notifications: false  # 선택적 활성화
-
-# ========================================
-# Cert-Manager 설정
-# ========================================
-letsencrypt_email: "your-email@example.com"  # 실제 이메일로 변경
+# ArgoCD settings
+argocd_enable_notifications: false

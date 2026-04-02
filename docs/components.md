@@ -10,9 +10,11 @@
 - Hubble을 통한 네트워크 관측성
 - Service Mesh 기능 포함 (선택적)
 
+**버전:** v1.19.1 (chart 1.19.1)
+
 **설치 방법:**
 ```bash
-ansible-playbook playbooks/04-install-cilium.yml
+ansible-playbook playbooks/site.yml  # Cilium은 자동 포함
 ```
 
 **확인:**
@@ -41,12 +43,38 @@ cilium status
 
 **설치:**
 ```bash
-ansible-playbook playbooks/06-install-gateway-api.yml
+ansible-playbook playbooks/site.yml  # Gateway API는 자동 포함
 ```
 
 ---
 
-### 3. Prometheus + Grafana
+### 3. Longhorn (분산 스토리지)
+
+**버전:** v1.7.2 (chart 1.7.2)
+
+**선택 이유 (vs Rook-Ceph):**
+| 특징 | Longhorn | Rook-Ceph |
+|------|----------|-----------|
+| 설치 복잡도 | ✅ 간단 | ❌ 복잡 |
+| 리소스 사용 | ✅ 경량 | ❌ 무거움 |
+| 소규모 클러스터 | ✅ 적합 | ⚠️ 오버스펙 |
+| UI | ✅ 내장 | ⚠️ 별도 설치 |
+| 백업 | ✅ 내장 | ✅ 지원 |
+
+**StorageClass:**
+- `longhorn` (default): 복제본 1개, 동적 프로비저닝
+- `longhorn-static`: 정적 프로비저닝용
+
+**접속:**
+```bash
+# Longhorn UI: http://<master-ip>:30088
+```
+
+---
+
+### 4. Prometheus + Grafana
+
+**버전:** kube-prometheus-stack chart 79.9.0 (Prometheus Operator v0.86.2)
 
 **Prometheus:**
 - 시계열 데이터베이스
@@ -72,7 +100,9 @@ ansible-playbook playbooks/06-install-gateway-api.yml
 
 ---
 
-### 4. Loki + Promtail
+### 5. Loki + Promtail
+
+**버전:** loki-stack chart 2.10.3 (Loki v2.9.3)
 
 **선택 이유 (vs EFK Stack):**
 | 특징 | Loki | Elasticsearch |
@@ -95,7 +125,9 @@ ansible-playbook playbooks/06-install-gateway-api.yml
 
 ---
 
-### 5. ArgoCD
+### 6. ArgoCD
+
+**버전:** v2.13.2
 
 **GitOps 워크플로우:**
 ```
@@ -124,7 +156,9 @@ kubectl -n argocd get secret argocd-initial-admin-secret \
 
 ---
 
-### 6. Sealed Secrets
+### 7. Sealed Secrets
+
+**버전:** chart 2.17.9 (app 0.33.1)
 
 **문제:**
 - Kubernetes Secret은 base64 인코딩 (암호화 아님)
@@ -151,7 +185,9 @@ git commit -m "Add sealed secret"
 
 ---
 
-### 7. Cert-Manager
+### 8. Cert-Manager
+
+**버전:** v1.16.2
 
 **자동화:**
 1. Let's Encrypt에 인증서 요청
@@ -179,7 +215,7 @@ spec:
 
 ---
 
-### 8. Helm
+### 9. Helm
 
 **역할:**
 - Kubernetes 패키지 매니저
