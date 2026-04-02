@@ -52,14 +52,33 @@ ansible-playbook playbooks/site.yml  # Gateway API는 자동 포함
 
 **버전:** v1.7.2 (chart 1.7.2)
 
-**선택 이유 (vs Rook-Ceph):**
+**Longhorn 선택 이유 (vs Rook-Ceph):**
+
+이 프로젝트는 초기에 Rook-Ceph로 구축되었으나, 2노드 환경에서 Longhorn으로 전환했습니다.
+
+**아키텍처 관점:**
+- **Rook-Ceph**: 최소 3개 OSD (Object Storage Daemon) 필요
+  - Ceph의 CRUSH 알고리즘은 데이터 복제를 위해 최소 3개 노드 권장
+  - 2노드 환경에서는 `mon_allow_pool_size_one=true` 등 비정상적인 설정 필요
+  - Quorum 구성이 불안정 (split-brain 위험)
+  
+- **Longhorn**: 2노드 환경에 최적화
+  - 단순한 복제 메커니즘 (replica count 설정 가능)
+  - 2노드에서도 안정적인 replica=1 운영 가능
+  - 노드 장애 시 자동 재스케줄링
+
+**기술적 차이:**
 | 특징 | Longhorn | Rook-Ceph |
 |------|----------|-----------|
-| 설치 복잡도 | ✅ 간단 | ❌ 복잡 |
-| 리소스 사용 | ✅ 경량 | ❌ 무거움 |
-| 소규모 클러스터 | ✅ 적합 | ⚠️ 오버스펙 |
+| 최소 노드 수 | 1개 | 3개 (권장) |
+| 설치 복잡도 | ✅ 간단 | ❌ 복잡 (OSD, MON, MGR) |
+| 리소스 사용 | ✅ 경량 (~500MB) | ❌ 무거움 (~2GB+) |
+| 소규모 클러스터 | ✅ 최적화됨 | ⚠️ 오버스펙 |
 | UI | ✅ 내장 | ⚠️ 별도 설치 |
-| 백업 | ✅ 내장 | ✅ 지원 |
+| 백업/복구 | ✅ 내장 | ✅ 지원 |
+| 스냅샷 | ✅ 지원 | ✅ 지원 |
+
+**결론:** OCI Free Tier의 2노드 환경에서는 Longhorn이 아키텍처적으로 더 적합합니다.
 
 **StorageClass:**
 - `longhorn` (default): 복제본 1개, 동적 프로비저닝
