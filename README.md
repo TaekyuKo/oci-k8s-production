@@ -179,45 +179,26 @@ kubectl get nodes
 
 ---
 
-## � 관리
+## 🔧 관리
 
 ### **클러스터 버전 업그레이드**
 
-주기적으로 Kubernetes 및 애드온 버전을 업그레이드할 때 사용:
+`ansible/inventory/group_vars/all.yml` 에서 원하는 버전으로 변경:
 
+```yaml
+kubernetes_version: "1.36"           # k8s 버전
+cilium_chart_version: "1.20.0"       # Cilium
+longhorn_chart_version: "1.8.0"      # Longhorn
+prometheus_chart_version: "80.0.0"   # Prometheus
+# ... 기타 애드온
+```
+
+업그레이드 실행:
 ```bash
-# 1. 버전 변경
-vim ansible/inventory/group_vars/all.yml
-
-# 예시: kubernetes_version: "1.35" → "1.36"
-#      cilium_chart_version: "1.19.1" → "1.20.0"
-
-# 2. 원클릭 업그레이드
 ./scripts/upgrade.sh
-
-# 또는 수동
-cd ansible
-ansible-playbook playbooks/upgrade.yml
 ```
 
-**업그레이드 프로세스**:
-1. Kubernetes 컴포넌트 업그레이드 (kubeadm, kubelet, kubectl)
-2. Master 노드: drain → kubeadm upgrade → uncordon
-3. Worker 노드: 순차적으로 drain → upgrade → uncordon
-4. 모든 애드온 Helm 차트 업그레이드
-
-**예상 소요 시간**: 약 15-20분
-
-> ⚠️ 업그레이드 중 일시적으로 워크로드가 재스케줄링될 수 있습니다.
-
-### **워커 노드 추가**
-```bash
-# terraform/terraform.tfvars 수정
-worker_count = 2
-
-terraform apply
-ansible-playbook playbooks/site.yml --limit k8s_workers
-```
+> ⚠️ 업그레이드 중 워크로드가 일시적으로 재스케줄링됩니다 (약 15-20분 소요)
 
 ### **Sealed Secret 생성**
 ```bash
