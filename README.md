@@ -286,14 +286,18 @@ cd terraform && terraform destroy -auto-approve
 | 아웃바운드 전송 | - | 10TB/월 |
 
 **IP 할당 전략:**
-- **Master 노드**: Ephemeral IP (임시 IP, 무료)
-  - 관리 목적으로만 사용 (kubectl, SSH)
-  - 인스턴스 재시작 시 IP 변경 가능
-  - OCI 콘솔에서 현재 IP 확인 필요
+
+클러스터 내부 통신은 Private IP (10.0.1.x)를 사용하므로 Public IP 변경은 클러스터 안정성에 영향을 주지 않습니다.
+
+- **Master 노드**: Ephemeral IP (무료)
+  - Control Plane API (6443) 및 관리 접근용
+  - 클러스터 내부 통신은 Private IP 사용
+  - IP 변경 시 kubeconfig 업데이트 필요 (관리자만 영향)
   
-- **Worker 노드**: Reserved IP (예약 IP, 프리티어 1개 무료)
-  - 애플리케이션 트래픽 처리
-  - 고정 IP로 DNS 설정 가능
-  - NodePort 서비스 안정적 접근
+- **Worker 노드**: Reserved IP (프리티어 1개 무료)
+  - 애플리케이션 엔드포인트로 사용
+  - NodePort 서비스의 안정적인 외부 노출
+  - DNS A 레코드 설정 가능 (도메인 연결)
+  - 사용자 접근 URL 고정 (데모/공유 환경에 유리)
 
 **월 예상 비용: $0** (프리티어 한도 내 완전 무료)
