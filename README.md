@@ -176,8 +176,11 @@ ansible-playbook playbooks/site.yml
 
 ### **4. 접속**
 ```bash
-# SSH
-ssh ubuntu@$(cd terraform && terraform output -raw master_public_ip)
+# Master (Ephemeral IP - Terraform output에서 확인)
+ssh ubuntu@<master-ip>
+
+# Worker (Reserved IP)
+ssh ubuntu@$(terraform output -raw primary_worker_ip)
 
 # kubeconfig
 mkdir -p ~/.kube
@@ -193,10 +196,12 @@ kubectl get nodes
 
 | 서비스 | URL | 계정 | 비밀번호 확인 |
 |--------|-----|------|-------------|
-| **Grafana** | `http://<master-ip>:30000` | admin | `kubectl get secret -n monitoring prometheus-grafana -o jsonpath='{.data.admin-password}' \| base64 -d` |
-| **Prometheus** | `http://<master-ip>:30090` | - | 인증 없음 |
-| **ArgoCD** | `https://<master-ip>:30080` | admin | `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' \| base64 -d` |
-| **Longhorn UI** | `http://<master-ip>:30088` | - | 인증 없음 |
+| **Grafana** | `http://<worker-ip>:30000` | admin | `kubectl get secret -n monitoring prometheus-grafana -o jsonpath='{.data.admin-password}' \| base64 -d` |
+| **Prometheus** | `http://<worker-ip>:30090` | - | 인증 없음 |
+| **ArgoCD** | `https://<worker-ip>:30080` | admin | `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' \| base64 -d` |
+| **Longhorn UI** | `http://<worker-ip>:30088` | - | 인증 없음 |
+
+> 💡 모든 서비스는 Worker 노드의 Reserved IP로 접속합니다.
 
 ---
 
@@ -274,7 +279,9 @@ cd terraform && terraform destroy -auto-approve
 | 리소스 | 사용 | 한도 |
 |--------|------|------|
 | VCN | 1 | 2 |
-| Reserved Public IP | 1 (Master) | 1 |
+| Reserved Public IP | 1 (Worker) | 1 |
 | 아웃바운드 전송 | - | 10TB/월 |
 
 **월 예상 비용: $0** (프리티어 한도 내 완전 무료)
+
+> 💡 Worker 노드에 Reserved IP를 할당하여 애플리케이션 트래픽을 안정적으로 처리합니다.

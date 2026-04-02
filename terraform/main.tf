@@ -160,7 +160,7 @@ resource "oci_core_instance" "k8s_master" {
   
   create_vnic_details {
     subnet_id                 = oci_core_subnet.public_subnet.id
-    assign_public_ip          = false
+    assign_public_ip          = true
     assign_private_dns_record = true
     skip_source_dest_check    = true
   }
@@ -179,28 +179,6 @@ resource "oci_core_instance" "k8s_master" {
     create = "30m"
     delete = "30m"
   }
-}
-
-# Master Node Reserved IP (첫 번째만)
-resource "oci_core_public_ip" "master_ip" {
-  count          = var.master_count
-  compartment_id = var.compartment_ocid
-  lifetime       = "RESERVED"
-  display_name   = "k8s-master-ip"
-  private_ip_id  = data.oci_core_private_ips.master_private_ip[count.index].private_ips[0].id
-
-  depends_on = [oci_core_instance.k8s_master]
-}
-
-data "oci_core_private_ips" "master_private_ip" {
-  count   = var.master_count
-  vnic_id = data.oci_core_vnic_attachments.master_vnic[count.index].vnic_attachments[0].vnic_id
-}
-
-data "oci_core_vnic_attachments" "master_vnic" {
-  count          = var.master_count
-  compartment_id = var.compartment_ocid
-  instance_id    = oci_core_instance.k8s_master[count.index].id
 }
 
 # Master Block Volumes
@@ -236,7 +214,7 @@ resource "oci_core_instance" "k8s_worker" {
   
   create_vnic_details {
     subnet_id                 = oci_core_subnet.public_subnet.id
-    assign_public_ip          = true
+    assign_public_ip          = false
     assign_private_dns_record = true
     skip_source_dest_check    = true
   }
@@ -255,6 +233,28 @@ resource "oci_core_instance" "k8s_worker" {
     create = "30m"
     delete = "30m"
   }
+}
+
+# Worker Node Reserved IP (첫 번째만)
+resource "oci_core_public_ip" "worker_ip" {
+  count          = var.worker_count
+  compartment_id = var.compartment_ocid
+  lifetime       = "RESERVED"
+  display_name   = "k8s-worker-ip"
+  private_ip_id  = data.oci_core_private_ips.worker_private_ip[count.index].private_ips[0].id
+
+  depends_on = [oci_core_instance.k8s_worker]
+}
+
+data "oci_core_private_ips" "worker_private_ip" {
+  count   = var.worker_count
+  vnic_id = data.oci_core_vnic_attachments.worker_vnic[count.index].vnic_attachments[0].vnic_id
+}
+
+data "oci_core_vnic_attachments" "worker_vnic" {
+  count          = var.worker_count
+  compartment_id = var.compartment_ocid
+  instance_id    = oci_core_instance.k8s_worker[count.index].id
 }
 
 # Worker Block Volumes
