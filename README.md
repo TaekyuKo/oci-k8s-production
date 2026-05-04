@@ -91,72 +91,83 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-    classDef layer fill:#F8F9FA,stroke:#6C757D,stroke-width:1px,color:#212529
-    classDef item  fill:#FFFFFF,stroke:#326CE5,stroke-width:1px,color:#212529
-    classDef tun   fill:#FFF4E6,stroke:#FB8C00,stroke-width:2px,color:#212529
+    classDef layer fill:#F1F3F5,stroke:#495057,stroke-width:2px,color:#212529
+    classDef node  fill:#E7F0FB,stroke:#1E5BB8,stroke-width:2px,color:#0D2A57
+    classDef pod   fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#0D2A57
+    classDef svc   fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px,color:#1B3A1D
+    classDef tun   fill:#FFF4E6,stroke:#E65100,stroke-width:3px,color:#3E1F00
 
     subgraph L1["Node Network · 10.0.1.0/24  (OCI VCN)"]
-        NM[master  10.0.1.X]:::item
-        NW[worker  10.0.1.Y]:::item
+        NM[master  10.0.1.X]:::node
+        NW[worker  10.0.1.Y]:::node
     end
 
     subgraph L2["Pod Network · 192.168.0.0/16  (Cilium IPAM)"]
-        PM[Pods @ master]:::item
-        PW[Pods @ worker]:::item
+        PM[Pods @ master]:::pod
+        PW[Pods @ worker]:::pod
     end
 
     subgraph L3["Service Network · 10.96.0.0/12  (ClusterIP / NodePort)"]
-        SVC[Services]:::item
+        SVC[Services]:::svc
     end
 
     TUN[VXLAN  UDP 8472]:::tun
 
-    PM <--> TUN <--> PW
+    PM <--> TUN
+    TUN <--> PW
     NM -. underlay .- TUN
     NW -. underlay .- TUN
     PM --> SVC
     PW --> SVC
 
     class L1,L2,L3 layer
+
+    linkStyle default stroke:#343A40,stroke-width:2px
 ```
 
 ### **Kubernetes 컴포넌트**
 
 ```mermaid
 flowchart LR
-    classDef ns   fill:#F8F9FA,stroke:#6C757D,stroke-width:1px,color:#212529
-    classDef item fill:#FFFFFF,stroke:#326CE5,stroke-width:1px,color:#212529
-    classDef hl   fill:#FFF4E6,stroke:#FB8C00,stroke-width:1.5px,color:#212529
+    classDef ns      fill:#F1F3F5,stroke:#495057,stroke-width:2px,color:#212529
+    classDef cp      fill:#E7F0FB,stroke:#1E5BB8,stroke-width:2px,color:#0D2A57
+    classDef sys     fill:#EAF4FE,stroke:#1976D2,stroke-width:2px,color:#0D2A57
+    classDef storage fill:#F1E8FA,stroke:#6A1B9A,stroke-width:2px,color:#2D0E47
+    classDef monitor fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px,color:#1B3A1D
+    classDef logging fill:#E0F7FA,stroke:#00838F,stroke-width:2px,color:#003F47
+    classDef gitops  fill:#FFEBEE,stroke:#C62828,stroke-width:2px,color:#4A0E0E
+    classDef sec     fill:#FFF8E1,stroke:#B8860B,stroke-width:2px,color:#3D2C00
+    classDef hl      fill:#FFF4E6,stroke:#E65100,stroke-width:3px,color:#3E1F00
 
     subgraph CP["control-plane (master)"]
-        API[kube-apiserver]:::item
-        ETCD[(etcd)]:::item
-        CTRL[controller-manager]:::item
-        SCHED[scheduler]:::item
+        API[kube-apiserver]:::cp
+        ETCD[(etcd)]:::cp
+        CTRL[controller-manager]:::cp
+        SCHED[scheduler]:::cp
     end
 
     subgraph KS["kube-system"]
-        CIL[Cilium + Hubble]:::item
-        DNS[CoreDNS]:::item
-        MS[metrics-server]:::item
-        GW[Gateway API CRDs]:::item
-        SS[sealed-secrets]:::item
+        CIL[Cilium + Hubble]:::sys
+        DNS[CoreDNS]:::sys
+        MS[metrics-server]:::sys
+        GW[Gateway API CRDs]:::sys
+        SS[sealed-secrets]:::sec
     end
 
     subgraph LH["longhorn-system"]
-        LHM[longhorn-manager]:::item
+        LHM[longhorn-manager]:::storage
         LHU[longhorn-ui  :30088]:::hl
     end
 
     subgraph MON["monitoring"]
         PROM[Prometheus  :30090]:::hl
         GRAF[Grafana  :30000]:::hl
-        AM[Alertmanager]:::item
+        AM[Alertmanager]:::monitor
     end
 
     subgraph LOG["logging"]
-        LOKI[Loki]:::item
-        PT[Promtail]:::item
+        LOKI[Loki]:::logging
+        PT[Promtail]:::logging
     end
 
     subgraph ARGO["argocd"]
@@ -164,7 +175,7 @@ flowchart LR
     end
 
     subgraph CM["cert-manager"]
-        CMC[cert-manager]:::item
+        CMC[cert-manager]:::sec
     end
 
     PROM -. PVC .-> LHM
@@ -175,6 +186,8 @@ flowchart LR
     GRAF --> LOKI
 
     class CP,KS,LH,MON,LOG,ARGO,CM ns
+
+    linkStyle default stroke:#343A40,stroke-width:2px
 ```
 
 ---
@@ -455,4 +468,5 @@ cd terraform && terraform destroy -auto-approve
   - 사용자 접근 URL 고정 (데모/공유 환경에 유리)
 
 **월 예상 비용: $0** (프리티어 한도 내 완전 무료)
+
 
