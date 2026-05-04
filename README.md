@@ -49,6 +49,231 @@ Oracle Cloud Infrastructure에서 Terraform과 Ansible을 활용한 프로덕션
 
 ---
 
+## 🏗️ 아키텍처
+
+### **인프라 구성도 (Terraform)**
+
+OCI 리소스 전체 토폴로지 — Terraform이 한 번에 프로비저닝하는 모든 객체를 보여줍니다.
+
+```mermaid
+flowchart TB
+    classDef oci fill:#FCE4E4,stroke:#F80000,stroke-width:2px,color:#000
+    classDef vcn fill:#FFF5E6,stroke:#FF8C00,stroke-width:2px,color:#000
+    classDef subnet fill:#FFFAF0,stroke:#FFA500,stroke-width:1px,color:#000
+    classDef compute fill:#E3EDFB,stroke:#326CE5,stroke-width:2px,color:#000
+    classDef storage fill:#F0E6FA,stroke:#7B3FBF,stroke-width:2px,color:#000
+    classDef ip fill:#FFE0CC,stroke:#FF6B00,stroke-width:3px,color:#000
+    classDef security fill:#FFF8DC,stroke:#DAA520,stroke-width:2px,color:#000
+    classDef ext fill:#EEEEEE,stroke:#666,stroke-width:1px,color:#000
+
+    Internet((🌐 Internet<br/>0.0.0.0/0)):::ext
+
+    subgraph OCI["☁️ Oracle Cloud Infrastructure - Compartment (Always Free Tier)"]
+        direction TB
+
+        IGW["🌍 Internet Gateway<br/>k8s-igw"]:::oci
+        RT["🧭 Route Table<br/>public-rt<br/>0.0.0.0/0 → IGW"]:::oci
+
+        SL["🛡️ Security List - cluster-sl<br/>━━━━━━━━━━━━━━━━━━━━<br/>Ingress:<br/>• 10.0.0.0/16 ALL  (Pod-to-Pod 필수)<br/>• TCP 22       (SSH)<br/>• TCP 6443     (K8s API)<br/>• TCP 80,443   (HTTP/HTTPS)<br/>• TCP 30000-32767  (NodePort)<br/>• ICMP         (ping)<br/>━━━━━━━━━━━━━━━━━━━━<br/>Egress: ALL → 0.0.0.0/0"]:::security
+
+        subgraph VCN["📦 VCN - k8s-cluster-vcn (10.0.0.0/16)  ·  DNS: k8svcn"]
+            direction TB
+
+            subgraph SUB["🌐 Public Subnet (10.0.1.0/24)  ·  DNS: public"]
+                direction LR
+
+                subgraph MASTER_BOX["🖥️ Compute - k8s-master"]
+                    direction TB
+                    M_SPEC["VM.Standard.A1.Flex<br/>ARM64 · 2 OCPU · 12GB RAM<br/>Ubuntu 22.04 LTS<br/>Boot Volume: 50GB<br/>skip_source_dest_check: true"]:::compute
+                    M_PRIV["Private IP<br/>10.0.1.X"]:::compute
+                    M_PUB["Ephemeral Public IP<br/>(가변, 관리자 접속용)"]:::ext
+                end
+
+                subgraph WORKER_BOX["🖥️ Compute - k8s-worker"]
+                    direction TB
+                    W_SPEC["VM.Standard.A1.Flex<br/>ARM64 · 2 OCPU · 12GB RAM<br/>Ubuntu 22.04 LTS<br/>Boot Volume: 50GB<br/>skip_source_dest_check: true"]:::compute
+                    W_PRIV["Private IP<br/>10.0.1.Y"]:::compute
+                    W_PUB["⭐ RESERVED Public IP<br/>(영구 고정 · 사용자 진입점)"]:::ip
+                end
+
+                BV_M[("💽 Block Volume<br/>k8s-master-bv<br/>50GB · iSCSI<br/>/dev/oracleoci/oraclevdb")]:::storage
+                BV_W[("💽 Block Volume<br/>k8s-worker-bv<br/>50GB · iSCSI<br/>/dev/oracleoci/oraclevdc")]:::storage
+            end
+        end
+    end
+
+    Internet -->|inbound| IGW
+    IGW --> RT
+    RT --> SUB
+    SUB -. enforced by .-> SL
+
+    BV_M ===|iSCSI Attach| MASTER_BOX
+    BV_W ===|iSCSI Attach| WORKER_BOX
+
+    M_PRIV -.->|VNIC| SUB
+    W_PRIV -.->|VNIC| SUB
+    M_PUB -.->|associate| M_PRIV
+    W_PUB -.->|associate| W_PRIV
+
+    class OCI oci
+    class VCN vcn
+    class SUB subnet
+```
+
+### **네트워크 토폴로지 (3-Layer CIDR + VXLAN Overlay)**
+
+노드/Pod/Service 3계층 네트워크가 어떻게 분리되고 Cilium VXLAN으로 연결되는지를 표현합니다.
+
+```mermaid
+flowchart TB
+    classDef nodeNet fill:#FFE6E6,stroke:#D32F2F,stroke-width:2px,color:#000
+    classDef podNet fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#000
+    classDef svcNet fill:#E8F5E9,stroke:#388E3C,stroke-width:2px,color:#000
+    classDef ext fill:#EEEEEE,stroke:#666,color:#000
+    classDef tun fill:#FFF3E0,stroke:#F57C00,stroke-width:3px,color:#000
+
+    subgraph LAYERS["🌐 Network Topology - 3-Layer CIDR Design"]
+        direction TB
+
+        subgraph L1["Layer 1 · Node Network (Underlay)  ·  10.0.1.0/24  ·  OCI VCN"]
+            direction LR
+            N_M["k8s-master VNIC<br/>10.0.1.X"]:::nodeNet
+            N_W["k8s-worker VNIC<br/>10.0.1.Y"]:::nodeNet
+            N_M <-->|"VCN Internal<br/>(SecList: ALL allowed)"| N_W
+        end
+
+        subgraph L2["Layer 2 · Pod Network (Overlay)  ·  192.168.0.0/16  ·  Cilium IPAM"]
+            direction LR
+            subgraph PODS_M["Pods @ master"]
+                P_M1["pod-A<br/>192.168.1.5"]:::podNet
+                P_M2["pod-B<br/>192.168.1.6"]:::podNet
+            end
+            subgraph PODS_W["Pods @ worker"]
+                P_W1["pod-C<br/>192.168.2.10"]:::podNet
+                P_W2["pod-D<br/>192.168.2.11"]:::podNet
+            end
+        end
+
+        subgraph L3["Layer 3 · Service Network (Virtual)  ·  10.96.0.0/12  ·  kube-proxy + Cilium eBPF"]
+            direction LR
+            SVC1["ClusterIP<br/>10.96.0.10:53<br/>(CoreDNS)"]:::svcNet
+            SVC2["ClusterIP<br/>10.96.x.x:80<br/>(workload)"]:::svcNet
+            SVC3["NodePort<br/>0.0.0.0:30000<br/>(Grafana)"]:::svcNet
+        end
+    end
+
+    TUN["🔒 VXLAN Tunnel<br/>UDP 8472<br/>(Cilium 캡슐화)"]:::tun
+
+    P_M1 -->|"src=192.168.1.5<br/>dst=192.168.2.10"| TUN
+    TUN -->|"outer src=10.0.1.X<br/>outer dst=10.0.1.Y"| P_W1
+
+    P_M2 -.->|resolve| SVC1
+    P_W2 -.->|call| SVC2
+
+    EXT((🌐 External User)):::ext
+    EXT -->|"Worker Reserved IP :30000"| SVC3
+    SVC3 -.->|iptables / eBPF DNAT| P_W1
+```
+
+### **Kubernetes 컴포넌트 토폴로지 (Ansible)**
+
+Ansible이 클러스터에 설치하는 모든 컴포넌트를 네임스페이스 단위로 정리한 그림입니다.
+
+```mermaid
+flowchart TB
+    classDef cp fill:#E3EDFB,stroke:#326CE5,stroke-width:2px,color:#000
+    classDef worker fill:#E8F4FB,stroke:#0288D1,stroke-width:2px,color:#000
+    classDef cni fill:#E1F5FE,stroke:#0277BD,stroke-width:2px,color:#000
+    classDef storage fill:#F0E6FA,stroke:#7B3FBF,stroke-width:2px,color:#000
+    classDef monitor fill:#E8F5E9,stroke:#388E3C,stroke-width:2px,color:#000
+    classDef logging fill:#E0F7FA,stroke:#00838F,stroke-width:2px,color:#000
+    classDef gitops fill:#FFEBEE,stroke:#D32F2F,stroke-width:2px,color:#000
+    classDef sec fill:#FFF8DC,stroke:#DAA520,stroke-width:2px,color:#000
+    classDef misc fill:#F5F5F5,stroke:#666,color:#000
+
+    subgraph CLUSTER["☸️ Kubernetes 1.35 Cluster (kubeadm)"]
+        direction TB
+
+        subgraph M_NODE["🖥️ Node: k8s-master  ·  control-plane (taint removed)"]
+            direction TB
+            subgraph M_STATIC["Static Pods (kubeadm)"]
+                API["kube-apiserver :6443"]:::cp
+                CTRL["kube-controller-manager"]:::cp
+                SCHED["kube-scheduler"]:::cp
+                ETCD[("etcd<br/>(single, local)")]:::cp
+            end
+            M_KUBE["kubelet · containerd 1.7.28"]:::cp
+            M_PROXY["kube-proxy"]:::cp
+            M_CIL["cilium-agent (DS)"]:::cni
+        end
+
+        subgraph W_NODE["🖥️ Node: k8s-worker"]
+            direction TB
+            W_KUBE["kubelet · containerd 1.7.28"]:::worker
+            W_PROXY["kube-proxy"]:::worker
+            W_CIL["cilium-agent (DS)"]:::cni
+        end
+
+        subgraph NS_KUBE["📁 ns: kube-system"]
+            CILOP["cilium-operator"]:::cni
+            HUBBLE["hubble-relay + hubble-ui"]:::cni
+            COREDNS["coredns"]:::cni
+            METRIC["metrics-server"]:::misc
+            SEALED["sealed-secrets-controller"]:::sec
+            GWAPI["Gateway API CRDs v1.2.1"]:::cni
+        end
+
+        subgraph NS_LH["📁 ns: longhorn-system"]
+            LH_MGR["longhorn-manager (DS)"]:::storage
+            LH_DRV["longhorn-driver-deployer"]:::storage
+            LH_UI["longhorn-ui<br/>NodePort :30088"]:::storage
+        end
+
+        subgraph NS_MON["📁 ns: monitoring"]
+            PROM["prometheus-server<br/>NodePort :30090<br/>retention 7d"]:::monitor
+            GRAF["grafana<br/>NodePort :30000<br/>admin/admin"]:::monitor
+            ALERT["alertmanager"]:::monitor
+            NEXP["node-exporter (DS)"]:::monitor
+            KSM["kube-state-metrics"]:::monitor
+        end
+
+        subgraph NS_LOG["📁 ns: logging"]
+            LOKI["loki<br/>retention 3d"]:::logging
+            PROMTAIL["promtail (DS)"]:::logging
+        end
+
+        subgraph NS_ARGO["📁 ns: argocd"]
+            ARGO_S["argocd-server<br/>NodePort :30080"]:::gitops
+            ARGO_R["argocd-repo-server"]:::gitops
+            ARGO_C["argocd-application-controller"]:::gitops
+            ARGO_RD["argocd-redis"]:::gitops
+        end
+
+        subgraph NS_CM["📁 ns: cert-manager"]
+            CM["cert-manager"]:::sec
+            CM_WH["cert-manager-webhook"]:::sec
+            CM_CAI["cainjector"]:::sec
+        end
+    end
+
+    M_KUBE -.-> API
+    W_KUBE -.->|join via :6443| API
+    M_CIL <-->|VXLAN UDP 8472| W_CIL
+
+    PROM -.->|PVC| LH_MGR
+    GRAF -.->|PVC| LH_MGR
+    LOKI -.->|PVC| LH_MGR
+    ALERT -.->|PVC| LH_MGR
+
+    PROMTAIL -->|scrape logs| LOKI
+    NEXP -->|metrics| PROM
+    KSM -->|metrics| PROM
+    GRAF -->|query| PROM
+    GRAF -->|query| LOKI
+```
+
+---
+
 ## 🏗️ 프로젝트 구조
 
 ```
@@ -96,6 +321,58 @@ oci-k8s-production/
 │
 └── docs/
     └── components.md                   # 컴포넌트 상세 설명
+```
+
+---
+
+## 🔄 배포 파이프라인
+
+`./scripts/deploy.sh` 한 번 실행으로 아래 흐름이 자동 진행됩니다.
+
+```mermaid
+flowchart LR
+    classDef tf fill:#623CE4,stroke:#341E90,color:#fff,stroke-width:2px
+    classDef ans fill:#EE0000,stroke:#990000,color:#fff,stroke-width:2px
+    classDef sh fill:#4EAA25,stroke:#2A6314,color:#fff,stroke-width:2px
+    classDef art fill:#F5F5F5,stroke:#666,color:#000
+
+    USER([👤 Operator]):::art
+    DEPLOY[/"./scripts/deploy.sh"/]:::sh
+
+    subgraph TF["Terraform Phase"]
+        direction TB
+        TF1["terraform init"]:::tf
+        TF2["terraform apply"]:::tf
+        TF3["VCN · Subnet · IGW<br/>SecList · RouteTable"]:::tf
+        TF4["Compute Instances<br/>Master + Worker(s)"]:::tf
+        TF5["Block Volumes + iSCSI Attach"]:::tf
+        TF6["Reserved Public IP (Worker)"]:::tf
+        TF7[/"hosts.ini 자동 생성<br/>(inventory.tpl)"/]:::art
+        TF1 --> TF2 --> TF3 --> TF4 --> TF5 --> TF6 --> TF7
+    end
+
+    WAIT[["⏱ sleep 60s<br/>(인스턴스 부팅)"]]:::sh
+
+    subgraph ANS["Ansible Phase"]
+        direction TB
+        A1["ansible-galaxy collection install<br/>(kubernetes.core, community.general)"]:::ans
+        A2["site.yml 실행"]:::ans
+        A3["Stage 1 · all nodes<br/>common · containerd · kubernetes"]:::ans
+        A4["Stage 2 · master<br/>kubeadm init · taint 제거"]:::ans
+        A5["Stage 3 · workers<br/>kubeadm join"]:::ans
+        A6["Stage 4 · master (kubectl)<br/>cilium · helm · gateway-api"]:::ans
+        A7["Stage 5 · master<br/>longhorn · monitoring · logging"]:::ans
+        A8["Stage 6 · master<br/>argocd · sealed-secrets<br/>cert-manager · metrics-server"]:::ans
+        A1 --> A2 --> A3 --> A4 --> A5 --> A6 --> A7 --> A8
+    end
+
+    DONE([✅ Production K8s Cluster Ready]):::art
+
+    USER --> DEPLOY
+    DEPLOY --> TF1
+    TF7 --> WAIT
+    WAIT --> A1
+    A8 --> DONE
 ```
 
 ---
@@ -189,6 +466,52 @@ kubectl get nodes
 ```
 
 > 💡 Master는 Ephemeral IP로 인스턴스 재시작 시 변경될 수 있습니다. Worker는 Reserved IP로 고정되어 애플리케이션 접근에 사용됩니다.
+
+---
+
+## 🔀 트래픽 플로우
+
+외부 사용자/관리자 요청이 클러스터 내부 Pod에 도달하기까지의 경로입니다.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as 👤 End User
+    participant A as 👨‍💻 Admin
+    participant IGW as 🌍 OCI IGW
+    participant SL as 🛡️ Security List
+    participant W as 🖥️ Worker (Reserved IP)
+    participant M as 🖥️ Master (Ephemeral IP)
+    participant KP as kube-proxy / Cilium eBPF
+    participant POD as 🐳 Target Pod
+    participant LH as 💾 Longhorn PVC
+    participant BV as 💽 OCI Block Volume
+
+    Note over U,W: 사용자 트래픽 (NodePort 경로)
+    U->>IGW: HTTPS GET worker_ip:30000
+    IGW->>SL: 30000-32767 허용 검사
+    SL->>W: TCP forward
+    W->>KP: NodePort → ClusterIP DNAT
+    KP->>POD: Pod IP (192.168.x.x)
+    POD-->>U: HTTP 200 (Grafana UI)
+
+    Note over A,M: 관리자 트래픽 (kubectl/SSH)
+    A->>IGW: SSH/API to master_ephemeral_ip
+    IGW->>SL: :22 / :6443 허용 검사
+    SL->>M: TCP forward
+    M-->>A: shell / kube API response
+
+    Note over POD,BV: 데이터 영속화
+    POD->>LH: PVC write
+    LH->>BV: iSCSI block I/O
+    BV-->>LH: ack
+    LH-->>POD: ack
+
+    Note over M,W: Pod-to-Pod (cross-node)
+    POD->>KP: dst=192.168.2.10
+    KP->>W: VXLAN encap (outer 10.0.1.X→10.0.1.Y, UDP 8472)
+    W->>POD: decap → deliver
+```
 
 ---
 
@@ -301,3 +624,4 @@ cd terraform && terraform destroy -auto-approve
   - 사용자 접근 URL 고정 (데모/공유 환경에 유리)
 
 **월 예상 비용: $0** (프리티어 한도 내 완전 무료)
+
